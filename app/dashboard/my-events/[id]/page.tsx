@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -18,7 +19,8 @@ import {
   changeEventStatus,
   getBookingsByEvent,
   getEventById,
-  updateEventDetails,
+  updateEvent,
+  getEventReviews,
 } from "@/lib/api";
 import { toast } from "sonner";
 import { ArrowLeft, Calendar, MapPin, Ticket } from "lucide-react";
@@ -30,10 +32,16 @@ export default function OrganizerEventDetailsPage() {
 
   const [event, setEvent] = useState<any>(null);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviewsSummary, setReviewsSummary] = useState<{
+    averageRating: number;
+    totalReviews: number;
+  }>({ averageRating: 0, totalReviews: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [newBannerFile, setNewBannerFile] = useState<File | null>(null);
   const [editForm, setEditForm] = useState({
     title: "",
     description: "",
@@ -72,15 +80,31 @@ export default function OrganizerEventDetailsPage() {
       try {
         setIsLoading(true);
 
-        const [eventResponse, bookingsResponse] = await Promise.all([
-          getEventById(eventId),
-          getBookingsByEvent(eventId),
-        ]);
+        const [eventResponse, bookingsResponse, reviewsResponse] =
+          await Promise.all([
+            getEventById(eventId),
+            getBookingsByEvent(eventId),
+            getEventReviews(eventId),
+          ]);
 
         setEvent(eventResponse?.data ?? eventResponse ?? null);
 
-        const normalizedBookings = normalizeResponse(bookingsResponse);
+        const normalizedBookings = normalizeResponse(bookingsResponse as any);
         setBookings(normalizedBookings);
+
+        const reviewsData = (reviewsResponse as any)?.data || reviewsResponse;
+        if (reviewsData && typeof reviewsData === "object") {
+          setReviewsSummary({
+            averageRating: reviewsData.averageRating || 0,
+            totalReviews: reviewsData.totalReviews || 0,
+          });
+          const normalizedReviews = Array.isArray(reviewsData.reviews)
+            ? reviewsData.reviews
+            : [];
+          setReviews(normalizedReviews);
+        } else {
+          setReviews([]);
+        }
       } catch (error) {
         console.error("Failed to load event details:", error);
         toast.error("Failed to load event details");
@@ -114,6 +138,7 @@ export default function OrganizerEventDetailsPage() {
       totalCapacity: String(event.totalCapacity ?? event.capacity ?? ""),
       ticketPrice: String(event.ticketPrice ?? 0),
     });
+    setNewBannerFile(null);
   }, [event]);
   const mergedBookings = useMemo(() => {
     const safeBookings = Array.isArray(bookings) ? bookings : [];
@@ -226,18 +251,18 @@ export default function OrganizerEventDetailsPage() {
     const statusValue = String(bookingStatus || "UNKNOWN").toUpperCase();
 
     if (statusValue === "CONFIRMED") {
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+      return "bg-neutral-800 text-neutral-100 border-neutral-700";
     }
 
     if (statusValue === "PENDING_PAYMENT") {
-      return "bg-amber-100 text-amber-900 border-amber-200";
+      return "bg-neutral-900 text-neutral-300 border-neutral-700";
     }
 
     if (statusValue === "CANCELLED") {
-      return "bg-red-100 text-red-800 border-red-200";
+      return "bg-neutral-900 text-neutral-400 border-neutral-800";
     }
 
-    return "bg-slate-100 text-slate-700 border-slate-200";
+    return "bg-neutral-900 text-neutral-300 border-neutral-700";
   };
 
   const handleStatusChange = async (nextStatus: "PUBLISHED" | "CANCELLED") => {
@@ -309,26 +334,36 @@ export default function OrganizerEventDetailsPage() {
         new Date(`${editForm.date}T${editForm.time}`).getTime() + durationMs,
       ).toISOString();
 
-      await updateEventDetails({
-        eventId: String(event.id),
-        title,
-        description,
-        category,
-        startDatetime,
-        endDatetime,
-        timezone: String(event.timezone || "Asia/Kolkata"),
-        venueName: location.split(",")[0] || location,
-        address: location,
-        city: String(event.city || "Pune"),
-        country: String(event.country || "India"),
-        totalCapacity,
-        ticketType: ticketPrice > 0 ? "PAID" : "FREE",
-        ticketPrice,
-        currency: String(event.currency || "INR"),
-        s3URLString: String(
-          event.bannerS3Url || event.s3URLString || event.image || "",
-        ),
-      });
+      const formData = new FormData();
+      formData.append(
+        "data",
+        JSON.stringify({
+          eventId: String(event.id),
+          title,
+          description,
+          category,
+          startDatetime,
+          endDatetime,
+          timezone: String(event.timezone || "Asia/Kolkata"),
+          venueName: location.split(",")[0] || location,
+          address: location,
+          city: String(event.city || "Pune"),
+          country: String(event.country || "India"),
+          totalCapacity,
+          ticketType: ticketPrice > 0 ? "PAID" : "FREE",
+          ticketPrice,
+          currency: String(event.currency || "INR"),
+          s3URLString: String(
+            event.bannerS3Url || event.s3URLString || event.image || "",
+          ),
+        }),
+      );
+
+      if (newBannerFile) {
+        formData.append("file", newBannerFile);
+      }
+
+      await updateEvent(formData);
 
       setEvent((prev: any) => ({
         ...prev,
@@ -353,6 +388,129 @@ export default function OrganizerEventDetailsPage() {
       setIsSavingEdit(false);
     }
   };
+
+  const StatTile = ({
+    label,
+    value,
+  }: {
+    label: string;
+    value: string | number;
+  }) => (
+    <div className="rounded-lg border border-neutral-800 bg-neutral-900/50 px-3 py-2">
+      <p className="text-[11px] uppercase tracking-wide text-neutral-400">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-neutral-100">{value}</p>
+    </div>
+  );
+
+  const BookingRow = ({ booking }: { booking: any }) => (
+    <div
+      key={booking.userId || booking.id || `${booking.quantity}`}
+      className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-sm space-y-3"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-medium text-neutral-100">
+            {booking.userName || "Unknown User"}
+          </p>
+          <p className="text-xs text-neutral-400">
+            {booking.userEmail || booking.userId || "No user email"}
+          </p>
+        </div>
+        <Badge
+          variant="outline"
+          className={getBookingStatusClasses(booking.status)}
+        >
+          {String(booking.status || "UNKNOWN").replaceAll("_", " ")}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 text-xs text-neutral-400 md:grid-cols-3">
+        <p>
+          Booking ID:{" "}
+          <span className="font-medium text-neutral-100">
+            {booking.id || "N/A"}
+          </span>
+        </p>
+        <p>
+          Event:{" "}
+          <span className="font-medium text-neutral-100">
+            {booking.eventName || event.title || "N/A"}
+          </span>
+        </p>
+        <p>
+          Seats:{" "}
+          <span className="font-medium text-neutral-100">
+            {Number(booking.quantity || 0)}
+          </span>
+        </p>
+        <p>
+          Unit Price:{" "}
+          <span className="font-medium text-neutral-100">
+            {formatCurrency(
+              Number(booking.unitPrice || 0),
+              booking.currency || "INR",
+            )}
+          </span>
+        </p>
+        <p>
+          Total:{" "}
+          <span className="font-medium text-neutral-100">
+            {formatCurrency(
+              Number(booking.totalAmount || 0),
+              booking.currency || "INR",
+            )}
+          </span>
+        </p>
+        <p>
+          Checked In:{" "}
+          <span className="font-medium text-neutral-100">
+            {booking.checkedInAt
+              ? new Date(booking.checkedInAt).toLocaleString()
+              : "Not checked in"}
+          </span>
+        </p>
+      </div>
+
+      {booking.qrS3Url && (
+        <div>
+          <a
+            href={booking.qrS3Url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-neutral-300 underline-offset-4 hover:underline"
+          >
+            View QR
+          </a>
+        </div>
+      )}
+    </div>
+  );
+
+  const ReviewRow = ({ review, index }: { review: any; index: number }) => (
+    <div
+      key={review.id || `${review.userId || "review"}-${index}`}
+      className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-2"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="font-medium text-neutral-100">
+          {review.userName || review.user?.name || "Anonymous"}
+        </p>
+        <p className="text-sm text-neutral-400">
+          Rating: {Number(review.rating || 0).toFixed(1)} / 5
+        </p>
+      </div>
+      <p className="text-sm text-neutral-300">
+        {review.comment || "No comment provided."}
+      </p>
+      {review.createdAt && (
+        <p className="text-xs text-neutral-500">
+          {new Date(review.createdAt).toLocaleString()}
+        </p>
+      )}
+    </div>
+  );
 
   if (isLoading) {
     return (
@@ -382,14 +540,14 @@ export default function OrganizerEventDetailsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 rounded-2xl border border-neutral-900 bg-neutral-950 p-4 text-neutral-100 md:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-900 pb-4">
         <Button variant="outline" onClick={() => router.push("/dashboard")}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to My Events
         </Button>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {canEdit && !isEditing && (
             <Button
               variant="secondary"
@@ -434,7 +592,7 @@ export default function OrganizerEventDetailsPage() {
         </div>
       </div>
 
-      <Card>
+      <Card className="overflow-hidden border-neutral-800 bg-neutral-900/80">
         <div className="relative h-56 w-full overflow-hidden rounded-t-lg md:h-72">
           <Image
             src={event.bannerS3Url || event.image || "/placeholder.svg"}
@@ -443,9 +601,9 @@ export default function OrganizerEventDetailsPage() {
             priority
             className="object-cover"
           />
-          <div className="absolute inset-0 bg-linear-to-t from-black/50 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-t from-neutral-950/90 via-neutral-950/10 to-transparent" />
         </div>
-        <CardHeader>
+        <CardHeader className="border-b border-neutral-900/80">
           <div className="flex items-start justify-between gap-3">
             <div>
               {isEditing ? (
@@ -473,17 +631,24 @@ export default function OrganizerEventDetailsPage() {
                 </div>
               ) : (
                 <>
-                  <CardTitle className="text-2xl">{event.title}</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <CardTitle className="text-2xl text-neutral-100">
+                    {event.title}
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-neutral-400">
                     {event.description || "No description"}
                   </p>
                 </>
               )}
             </div>
-            <Badge variant="outline">{status}</Badge>
+            <Badge
+              variant="outline"
+              className="border-neutral-700 text-neutral-200"
+            >
+              {status}
+            </Badge>
           </div>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <CardContent className="grid grid-cols-1 gap-4 pt-5 text-sm md:grid-cols-2">
           {isEditing ? (
             <>
               <div className="space-y-1">
@@ -561,19 +726,31 @@ export default function OrganizerEventDetailsPage() {
                   }
                 />
               </div>
+              <div className="space-y-1 md:col-span-2">
+                <p className="text-xs text-muted-foreground">
+                  Banner Image (optional)
+                </p>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) =>
+                    setNewBannerFile(e.target.files?.[0] ?? null)
+                  }
+                />
+              </div>
             </>
           ) : (
             <>
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900/40 px-3 py-2">
+                <Calendar className="w-4 h-4 text-neutral-400" />
                 <span>
                   {event.startDatetime
                     ? new Date(event.startDatetime).toLocaleString()
                     : "Date not set"}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900/40 px-3 py-2">
+                <MapPin className="w-4 h-4 text-neutral-400" />
                 <span>
                   {event.venueName ||
                     event.city ||
@@ -581,14 +758,14 @@ export default function OrganizerEventDetailsPage() {
                     "Location not set"}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <Ticket className="w-4 h-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900/40 px-3 py-2">
+                <Ticket className="w-4 h-4 text-neutral-400" />
                 <span>
                   Price: {formatCurrency(Number(event.ticketPrice || 0), "INR")}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <Ticket className="w-4 h-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900/40 px-3 py-2">
+                <Ticket className="w-4 h-4 text-neutral-400" />
                 <span>
                   Capacity: {Number(event.availableCapacity ?? 0)} /{" "}
                   {Number(event.totalCapacity ?? event.capacity ?? 0)} available
@@ -599,217 +776,192 @@ export default function OrganizerEventDetailsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <CardTitle>
+      <Tabs defaultValue="bookings" className="space-y-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <CardTitle className="text-lg text-neutral-100">
+            Booking and Reviews
+          </CardTitle>
+          <TabsList className="border border-neutral-800 bg-neutral-900/70 p-1">
+            <TabsTrigger value="bookings">
               Bookings ({filteredBookings.length})
-              <span className="ml-2 text-xs font-normal text-muted-foreground">
-                of {mergedBookings.length}
-              </span>
-            </CardTitle>
-            <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-              <div className="rounded-md border px-3 py-2">
-                <p className="text-muted-foreground">Total Bookings</p>
-                <p className="font-semibold">{bookingSummary.totalBookings}</p>
+            </TabsTrigger>
+            <TabsTrigger value="reviews">
+              Reviews ({reviewsSummary.totalReviews})
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="bookings" className="mt-0">
+          <Card className="border-neutral-800 bg-neutral-900/70">
+            <CardHeader>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <CardTitle>
+                  Bookings ({filteredBookings.length})
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    of {mergedBookings.length}
+                  </span>
+                </CardTitle>
+                <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                  <StatTile
+                    label="Total Bookings"
+                    value={bookingSummary.totalBookings}
+                  />
+                  <StatTile
+                    label="Seats Booked"
+                    value={bookingSummary.totalSeats}
+                  />
+                  <StatTile
+                    label="Gross Amount"
+                    value={formatCurrency(bookingSummary.totalRevenue, "INR")}
+                  />
+                </div>
               </div>
-              <div className="rounded-md border px-3 py-2">
-                <p className="text-muted-foreground">Seats Booked</p>
-                <p className="font-semibold">{bookingSummary.totalSeats}</p>
+
+              <div className="grid grid-cols-1 gap-2 pt-3 md:grid-cols-3 lg:grid-cols-4">
+                <Input
+                  placeholder="Search user, email, booking id"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Status</SelectItem>
+                    <SelectItem value="PENDING_PAYMENT">
+                      Pending Payment
+                    </SelectItem>
+                    <SelectItem value="CONFIRMED">Confirmed</SelectItem>
+                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                    <SelectItem value="FAILED">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={checkInFilter} onValueChange={setCheckInFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Check-In" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Check-In</SelectItem>
+                    <SelectItem value="CHECKED_IN">Checked In</SelectItem>
+                    <SelectItem value="NOT_CHECKED_IN">
+                      Not Checked In
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sort By" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NEWEST">Newest</SelectItem>
+                    <SelectItem value="OLDEST">Oldest</SelectItem>
+                    <SelectItem value="HIGHEST_AMOUNT">
+                      Highest Amount
+                    </SelectItem>
+                    <SelectItem value="LOWEST_AMOUNT">Lowest Amount</SelectItem>
+                    <SelectItem value="MOST_SEATS">Most Seats</SelectItem>
+                    <SelectItem value="LEAST_SEATS">Least Seats</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  type="number"
+                  placeholder="Min total amount"
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                />
+
+                <Input
+                  type="number"
+                  placeholder="Max total amount"
+                  value={maxAmount}
+                  onChange={(e) => setMaxAmount(e.target.value)}
+                />
+
+                <Input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                />
+
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setStatusFilter("ALL");
+                      setCheckInFilter("ALL");
+                      setMinAmount("");
+                      setMaxAmount("");
+                      setFromDate("");
+                      setToDate("");
+                      setSortBy("NEWEST");
+                    }}
+                  >
+                    Clear
+                  </Button>
+                </div>
               </div>
-              <div className="rounded-md border px-3 py-2">
-                <p className="text-muted-foreground">Gross Amount</p>
-                <p className="font-semibold">
-                  {formatCurrency(bookingSummary.totalRevenue, "INR")}
+            </CardHeader>
+            <CardContent>
+              {filteredBookings.length === 0 ? (
+                <p className="text-sm text-neutral-400">
+                  No bookings match the selected filters.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {filteredBookings.map((booking: any) => (
+                    <BookingRow
+                      booking={booking}
+                      key={booking.id || booking.userId}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reviews" className="mt-0">
+          <Card className="border-neutral-800 bg-neutral-900/70">
+            <CardHeader className="border-b border-neutral-900/80">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-neutral-100">Reviews</CardTitle>
+                <p className="text-sm text-neutral-400">
+                  Avg rating: {reviewsSummary.averageRating.toFixed(1)} / 5
                 </p>
               </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 pt-3 md:grid-cols-3 lg:grid-cols-4">
-            <Input
-              placeholder="Search user, email, booking id"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All Status</SelectItem>
-                <SelectItem value="PENDING_PAYMENT">Pending Payment</SelectItem>
-                <SelectItem value="CONFIRMED">Confirmed</SelectItem>
-                <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                <SelectItem value="FAILED">Failed</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={checkInFilter} onValueChange={setCheckInFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Check-In" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All Check-In</SelectItem>
-                <SelectItem value="CHECKED_IN">Checked In</SelectItem>
-                <SelectItem value="NOT_CHECKED_IN">Not Checked In</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sort By" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="NEWEST">Newest</SelectItem>
-                <SelectItem value="OLDEST">Oldest</SelectItem>
-                <SelectItem value="HIGHEST_AMOUNT">Highest Amount</SelectItem>
-                <SelectItem value="LOWEST_AMOUNT">Lowest Amount</SelectItem>
-                <SelectItem value="MOST_SEATS">Most Seats</SelectItem>
-                <SelectItem value="LEAST_SEATS">Least Seats</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Input
-              type="number"
-              placeholder="Min total amount"
-              value={minAmount}
-              onChange={(e) => setMinAmount(e.target.value)}
-            />
-
-            <Input
-              type="number"
-              placeholder="Max total amount"
-              value={maxAmount}
-              onChange={(e) => setMaxAmount(e.target.value)}
-            />
-
-            <Input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-            />
-
-            <div className="flex items-center gap-2">
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm("");
-                  setStatusFilter("ALL");
-                  setCheckInFilter("ALL");
-                  setMinAmount("");
-                  setMaxAmount("");
-                  setFromDate("");
-                  setToDate("");
-                  setSortBy("NEWEST");
-                }}
-              >
-                Clear
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {filteredBookings.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No bookings match the selected filters.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {filteredBookings.map((booking: any) => (
-                <div
-                  key={booking.userId || booking.id || `${booking.quantity}`}
-                  className="rounded-lg border px-4 py-3 text-sm space-y-3"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-medium">
-                        {booking.userName || "Unknown User"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {booking.userEmail || booking.userId || "No user email"}
-                      </p>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={getBookingStatusClasses(booking.status)}
-                    >
-                      {String(booking.status || "UNKNOWN").replaceAll("_", " ")}
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground md:grid-cols-3">
-                    <p>
-                      Booking ID:{" "}
-                      <span className="font-medium text-foreground">
-                        {booking.id || "N/A"}
-                      </span>
-                    </p>
-                    <p>
-                      Event:{" "}
-                      <span className="font-medium text-foreground">
-                        {booking.eventName || event.title || "N/A"}
-                      </span>
-                    </p>
-                    <p>
-                      Seats:{" "}
-                      <span className="font-medium text-foreground">
-                        {Number(booking.quantity || 0)}
-                      </span>
-                    </p>
-                    <p>
-                      Unit Price:{" "}
-                      <span className="font-medium text-foreground">
-                        {formatCurrency(
-                          Number(booking.unitPrice || 0),
-                          booking.currency || "INR",
-                        )}
-                      </span>
-                    </p>
-                    <p>
-                      Total:{" "}
-                      <span className="font-medium text-foreground">
-                        {formatCurrency(
-                          Number(booking.totalAmount || 0),
-                          booking.currency || "INR",
-                        )}
-                      </span>
-                    </p>
-                    <p>
-                      Checked In:{" "}
-                      <span className="font-medium text-foreground">
-                        {booking.checkedInAt
-                          ? new Date(booking.checkedInAt).toLocaleString()
-                          : "Not checked in"}
-                      </span>
-                    </p>
-                  </div>
-
-                  {booking.qrS3Url && (
-                    <div>
-                      <a
-                        href={booking.qrS3Url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-blue-600 hover:underline"
-                      >
-                        View QR
-                      </a>
-                    </div>
-                  )}
+            </CardHeader>
+            <CardContent>
+              {reviews.length === 0 ? (
+                <p className="text-sm text-neutral-400">
+                  No reviews available for this event.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {reviews.map((review: any, index: number) => (
+                    <ReviewRow
+                      review={review}
+                      index={index}
+                      key={review.id || `${review.userId || "review"}-${index}`}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

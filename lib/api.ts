@@ -1,6 +1,4 @@
 import axios, { AxiosRequestConfig } from "axios";
-import { Updock } from "next/font/google";
-import { log } from "node:console";
 
 type RequestOptions = {
   cache?: boolean;
@@ -528,94 +526,127 @@ export const apiClient = {
     return response;
   },
 };
+
+type EventDraftPayload = {
+  eventId?: string;
+  title: string;
+  description: string;
+  category: string;
+  startDatetime: string;
+  endDatetime: string;
+  timezone: string;
+  venueName: string;
+  address: string;
+  city: string;
+  country: string;
+  totalCapacity: number;
+  ticketType: "FREE" | "PAID";
+  ticketPrice: number;
+  currency: string;
+  s3URLString?: string;
+};
+
+type EventMutationPayload = EventDraftPayload & {
+  eventId: string;
+  s3URLString: string;
+};
+
+const getAuthHeaders = (): HeadersInit => {
+  const token = getAccessToken();
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+};
+
+const parseEventFormData = (formData: FormData) => {
+  if (!(formData instanceof FormData) || [...formData.keys()].length === 0) {
+    throw new Error("Event form data is empty");
+  }
+
+  const imageFile = formData.get("file");
+  if (!(imageFile instanceof File)) {
+    throw new Error("Invalid file");
+  }
+
+  const dataField = formData.get("data");
+  if (typeof dataField !== "string") {
+    throw new Error("Invalid event payload");
+  }
+
+  const payload = JSON.parse(dataField) as EventDraftPayload;
+  const normalizedTicketType: "FREE" | "PAID" =
+    payload.ticketType === "PAID" ? "PAID" : "FREE";
+
+  return {
+    imageFile,
+    payload: {
+      ...payload,
+      ticketType: normalizedTicketType,
+    } as EventDraftPayload,
+  };
+};
+
+const buildEventMutationPayload = async (
+  imageFile: File,
+  payload: EventDraftPayload,
+  headers: HeadersInit,
+  existingEventId?: string | null,
+): Promise<EventMutationPayload> => {
+  const uploadJson = await uploadEventImage(
+    imageFile,
+    headers,
+    existingEventId,
+  );
+  const { uploadUrl, fileUrl, eventId } = uploadJson.data ?? {};
+
+  if (!uploadUrl || !fileUrl) {
+    throw new Error("Upload URL generation failed");
+  }
+
+  await uploadToS3(imageFile, uploadUrl);
+
+  const resolvedEventId = String(eventId || payload.eventId || "").trim();
+  if (!resolvedEventId) {
+    throw new Error("Missing event ID");
+  }
+
+  return {
+    ...payload,
+    eventId: resolvedEventId,
+    s3URLString: String(fileUrl),
+  };
+};
+
+const handleEventMutationResponse = async (
+  response: Response,
+  action: string,
+) => {
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      (result && typeof result === "object" && "error" in result
+        ? String((result as { error?: unknown }).error)
+        : null) || `Failed to ${action} event`,
+    );
+  }
+
+  invalidateApiCache(/\/api\/events/);
+  return result;
+};
+
 export const createEvent = async (formData: FormData) => {
   try {
-    if (!(formData instanceof FormData) || [...formData.keys()].length === 0) {
-      throw new Error("Event form data is empty");
-    }
-
-    const token = getAccessToken();
-
-    const headers: HeadersInit = {};
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    // ✅ 1. Extract file safely
-    const imageFile = formData.get("file");
-
-    if (!(imageFile instanceof File)) {
-      throw new Error("Invalid file");
-    }
-
-    const dataField = formData.get("data");
-    if (typeof dataField !== "string") {
-      throw new Error("Invalid event payload");
-    }
-
-    const payload = JSON.parse(dataField) as {
-      eventId?: string;
-      title: string;
-      description: string;
-      category: string;
-      startDatetime: string;
-      endDatetime: string;
-      timezone: string;
-      venueName: string;
-      address: string;
-      city: string;
-      country: string;
-      totalCapacity: number;
-      ticketType: "FREE" | "PAID";
-      ticketPrice: number;
-      currency: string;
-    };
-
-    const normalizedTicketType: "FREE" | "PAID" =
-      payload.ticketType === "PAID" ? "PAID" : "FREE";
-
-    const uploadJson = await uploadEventImage(imageFile, headers, null);
-    const { uploadUrl, fileUrl, eventId } = uploadJson.data ?? {};
-
-    if (!uploadUrl || !fileUrl) {
-      throw new Error("Upload URL generation failed");
-    }
-
-    await uploadToS3(imageFile, uploadUrl);
-
-    const createPayload = {
-      eventId: eventId || payload.eventId,
-      title: payload.title,
-      description: payload.description,
-      category: payload.category,
-      startDatetime: payload.startDatetime,
-      endDatetime: payload.endDatetime,
-      timezone: payload.timezone,
-      venueName: payload.venueName,
-      address: payload.address,
-      city: payload.city,
-      country: payload.country,
-      totalCapacity: payload.totalCapacity,
-      ticketType: normalizedTicketType,
-      ticketPrice: payload.ticketPrice,
-      currency: payload.currency,
-      s3URLString: fileUrl,
-    };
+    const headers = getAuthHeaders();
+    const { imageFile, payload } = parseEventFormData(formData);
+    const createPayload = await buildEventMutationPayload(
+      imageFile,
+      payload,
+      headers,
+      null,
+    );
 
     const response = await updateEventDetails(createPayload);
-
-    const result = await response.json().catch(() => null);
-
-    if (!response.ok) {
-      throw new Error(
-        (result && typeof result === "object" && "error" in result
-          ? String((result as { error?: unknown }).error)
-          : null) || "Failed to create event",
-      );
-    }
-
-    invalidateApiCache(/\/api\/events/);
-    return result;
+    return handleEventMutationResponse(response, "create");
   } catch (error) {
     console.error("Error creating event:", error);
     throw error;
@@ -692,7 +723,7 @@ export const uploadEventImage = async (
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      fileName: file.name.split(".")[0],
+      fileName: file.name,
       contentType: file.type,
       isBanner: true,
     }),
@@ -707,86 +738,112 @@ export const updateEvent = async (formData: FormData) => {
       throw new Error("Event form data is empty");
     }
 
-    const token = getAccessToken();
-    const headers: HeadersInit = {};
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    const imageFile = formData.get("file");
-
-    if (!(imageFile instanceof File)) {
-      throw new Error("Invalid file");
-    }
-
+    const headers = getAuthHeaders();
     const dataField = formData.get("data");
     if (typeof dataField !== "string") {
       throw new Error("Invalid event payload");
     }
 
-    const payload = JSON.parse(dataField) as {
-      eventId?: string;
-      title: string;
-      description: string;
-      category: string;
-      startDatetime: string;
-      endDatetime: string;
-      timezone: string;
-      venueName: string;
-      address: string;
-      city: string;
-      country: string;
-      totalCapacity: number;
-      ticketType: "FREE" | "PAID";
-      ticketPrice: number;
-      currency: string;
-    };
-
+    const payload = JSON.parse(dataField) as EventDraftPayload;
     const normalizedTicketType: "FREE" | "PAID" =
       payload.ticketType === "PAID" ? "PAID" : "FREE";
 
-    const uploadJson = await uploadEventImage(
-      imageFile,
-      headers,
-      payload.eventId,
-    );
-    const { uploadUrl, fileUrl, eventId } = uploadJson.data ?? {};
-
-    await uploadToS3(imageFile, uploadUrl);
-    const createPayload = {
-      eventId: eventId || payload.eventId,
-      title: payload.title,
-      description: payload.description,
-      category: payload.category,
-      startDatetime: payload.startDatetime,
-      endDatetime: payload.endDatetime,
-      timezone: payload.timezone,
-      venueName: payload.venueName,
-      address: payload.address,
-      city: payload.city,
-      country: payload.country,
-      totalCapacity: payload.totalCapacity,
+    const basePayload: EventDraftPayload = {
+      ...payload,
       ticketType: normalizedTicketType,
-      ticketPrice: payload.ticketPrice,
-      currency: payload.currency,
-      s3URLString: fileUrl,
     };
-    const response = await updateEventDetails(createPayload);
 
-    const result = await response.json().catch(() => null);
+    const imageEntry = formData.get("file");
+    let createPayload: EventMutationPayload;
 
-    if (!response.ok) {
-      throw new Error(
-        (result && typeof result === "object" && "error" in result
-          ? String((result as { error?: unknown }).error)
-          : null) || "Failed to create event",
+    if (imageEntry instanceof File) {
+      createPayload = await buildEventMutationPayload(
+        imageEntry,
+        basePayload,
+        headers,
+        basePayload.eventId,
       );
+    } else {
+      const resolvedEventId = String(basePayload.eventId || "").trim();
+      const existingBannerUrl = String(basePayload.s3URLString || "").trim();
+
+      if (!resolvedEventId) {
+        throw new Error("Missing event ID");
+      }
+
+      if (!existingBannerUrl) {
+        throw new Error("Missing banner URL");
+      }
+
+      createPayload = {
+        ...basePayload,
+        eventId: resolvedEventId,
+        s3URLString: existingBannerUrl,
+      };
     }
 
-    invalidateApiCache(/\/api\/events/);
-    return result;
+    const response = await updateEventDetails(createPayload);
+    return handleEventMutationResponse(response, "update");
   } catch (error) {
     console.error("Error updating event:", error);
+    throw error;
+  }
+};
+
+export const getEventReviews = async (eventId: string) => {
+  try {
+    const url = new URL("/api/events/reviews", window.location.origin);
+    url.searchParams.append("eventId", eventId);
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch event reviews");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching event reviews:", error);
+    throw error;
+  }
+};
+
+export const createReview = async (
+  eventId: string,
+  data: {
+    rating: number;
+    comment: string;
+    userName: string;
+    bookingId?: string;
+  },
+  userId: string,
+) => {
+  try {
+    const response = await fetch("/api/events/reviews", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getAccessToken()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        eventId,
+        rating: data.rating,
+        comment: data.comment,
+        userName: data.userName,
+        bookingId: data.bookingId,
+        userId,
+      }),
+    });
+
+    invalidateApiCache(/\/api\/events\/reviews/);
+    return response;
+  } catch (error) {
+    console.error("Error creating review:", error);
     throw error;
   }
 };
