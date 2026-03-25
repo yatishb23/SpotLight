@@ -35,7 +35,14 @@ export default function MyBookingsPage() {
         try {
           setIsLoading(true);
           const data = await apiClient.getUserBookings(session.user.id);
-          setBookings(data);
+          const normalizedBookings = Array.isArray(data)
+            ? data
+            : Array.isArray((data as any)?.bookings)
+              ? (data as any).bookings
+              : Array.isArray((data as any)?.data)
+                ? (data as any).data
+                : [];
+          setBookings(normalizedBookings);
         } catch (error) {
           console.error("Failed to fetch bookings:", error);
         } finally {

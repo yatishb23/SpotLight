@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { Clock, Info } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Event } from "@/lib/types";
+import { apiClient } from "@/lib/api";
 
 export default function BookingPage() {
   const params = useParams();
@@ -69,15 +70,7 @@ export default function BookingPage() {
           );
         }
 
-        // Mock event data fetch
-        const eventData = await fetch(`/api/events/getbyid?id=${eventId}`).then(
-          (res) => {
-            if (!res.ok) {
-              throw new Error("Failed to fetch event details");
-            }
-            return res.json();
-          },
-        );
+        const eventData = await apiClient.getEventById(eventId);
         setEvent((eventData?.data ?? eventData) as Event);
 
         // Mock seat data fetch

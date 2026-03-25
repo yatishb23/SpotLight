@@ -6,7 +6,11 @@ import { EventBanner } from "@/components/event-banner";
 import { TicketForm } from "@/components/ticket-form";
 import { LoadingState } from "@/components/loading-state";
 import { ErrorFallback } from "@/components/error-fallback";
-// import { apiClient } from '@/lib/api';
+import {
+  apiClient,
+  getCachedEventSnapshot,
+  primeEventSnapshots,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,29 +38,33 @@ export default function EventDetailsPage() {
   useEffect(() => {
     const fetchEvent = async () => {
       try {
-        setIsLoading(true);
+        const cachedEvent = getCachedEventSnapshot<Event>(eventId);
+        if (cachedEvent) {
+          setEvent(cachedEvent);
+          setIsLoading(false);
+        } else {
+          setIsLoading(true);
+        }
         setError(null);
-        const eventData = await fetch(`/api/events/getbyid?id=${eventId}`).then(
-          (res) => {
-            if (!res.ok) {
-              throw new Error("Failed to fetch event details");
-            }
-            return res.json();
-          },
+        const eventData = (await apiClient.getEventById(eventId)) as any;
+        const normalizedEvent = eventData?.data ?? eventData;
+        if (normalizedEvent) {
+          primeEventSnapshots([normalizedEvent]);
+        }
+
+        const organizerData = normalizedEvent?.organizerId
+          ? await apiClient.getUserById(String(normalizedEvent.organizerId))
+          : null;
+
+        const normalizedOrganizer =
+          (organizerData as any)?.data ?? organizerData ?? null;
+
+        setEvent(normalizedEvent);
+        setOrganizer(
+          (normalizedOrganizer as any)?.fullName ||
+            (normalizedOrganizer as any)?.name ||
+            "Organizer",
         );
-
-        const organizer = await fetch(
-          `/api/users/getbyid?id=${eventData.data.organizerId}`,
-        ).then((res) => {
-          if (!res.ok) {
-            throw new Error("Failed to fetch organizer details");
-          }
-          return res.json();
-        });
-        console.log(organizer);
-
-        setEvent(eventData.data);
-        setOrganizer(organizer.fullName);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load event");
         console.error("[v0] Error fetching event:", err);

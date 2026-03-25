@@ -12,7 +12,7 @@ import {
 import { AnalyticsChart } from "@/components/analytics-chart";
 import { LoadingState } from "@/components/loading-state";
 import { ErrorFallback } from "@/components/error-fallback";
-import { apiClient, getBookingsByEvent } from "../../../lib/api";
+import { apiClient, getBookingsByEvent } from "@/lib/api";
 import {
   Select,
   SelectContent,
@@ -221,11 +221,21 @@ export default function AnalyticsPage() {
     fetchAnalytics(true);
 
     const intervalId = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
       fetchAnalytics(false);
     }, LIVE_REFRESH_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [session?.user?.id, sessionStatus, selectedEventId]);
+  }, [session?.user?.id, sessionStatus]);
+
+  useEffect(() => {
+    const event = allAnalytics.find((a) => a.eventId === selectedEventId);
+    if (event) {
+      setAnalytics(event);
+    }
+  }, [allAnalytics, selectedEventId]);
 
   const handleEventChange = (eventId: string) => {
     setSelectedEventId(eventId);

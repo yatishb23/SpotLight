@@ -56,13 +56,15 @@ export default function ManageEventsPage() {
     const fetchEvents = async () => {
       try {
         setIsLoading(true);
-        const adminData = await getAdminStats();
-        const normalizedEvents = Array.isArray(adminData?.events)
-          ? adminData.events
-          : Array.isArray(adminData?.events?.events)
-            ? adminData.events.events
-            : Array.isArray(adminData?.events?.data)
-              ? adminData.events.data
+        const adminData = (await getAdminStats()) as any;
+        const eventsPayload = adminData?.events;
+
+        const normalizedEvents = Array.isArray(eventsPayload)
+          ? eventsPayload
+          : Array.isArray(eventsPayload?.events)
+            ? eventsPayload.events
+            : Array.isArray(eventsPayload?.data)
+              ? eventsPayload.data
               : [];
         setEvents(normalizedEvents);
       } catch (error) {

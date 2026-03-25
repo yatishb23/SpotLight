@@ -14,7 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { changeEventStatus, getBookingsByEvent, getEventById } from "@/lib/api";
+import {
+  changeEventStatus,
+  getBookingsByEvent,
+  getEventById,
+  updateEventDetails,
+} from "@/lib/api";
 import { toast } from "sonner";
 import { ArrowLeft, Calendar, MapPin, Ticket } from "lucide-react";
 
@@ -27,6 +32,18 @@ export default function OrganizerEventDetailsPage() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    category: "",
+    date: "",
+    time: "",
+    location: "",
+    totalCapacity: "",
+    ticketPrice: "",
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [checkInFilter, setCheckInFilter] = useState("ALL");
@@ -78,6 +95,26 @@ export default function OrganizerEventDetailsPage() {
   }, [eventId]);
 
   const status = String(event?.status || "DRAFT").toUpperCase();
+  const canEdit = status === "DRAFT" || status === "PUBLISHED";
+
+  useEffect(() => {
+    if (!event) return;
+
+    const start = event.startDatetime ? new Date(event.startDatetime) : null;
+    const date = start ? start.toISOString().slice(0, 10) : "";
+    const time = start ? start.toISOString().slice(11, 16) : "";
+
+    setEditForm({
+      title: String(event.title || ""),
+      description: String(event.description || ""),
+      category: String(event.category || ""),
+      date,
+      time,
+      location: String(event.address || event.venueName || event.city || ""),
+      totalCapacity: String(event.totalCapacity ?? event.capacity ?? ""),
+      ticketPrice: String(event.ticketPrice ?? 0),
+    });
+  }, [event]);
   const mergedBookings = useMemo(() => {
     const safeBookings = Array.isArray(bookings) ? bookings : [];
     if (safeBookings.length > 0) return safeBookings;
@@ -219,6 +256,104 @@ export default function OrganizerEventDetailsPage() {
     }
   };
 
+  const handleSaveEdit = async () => {
+    if (!event?.id) return;
+
+    const title = editForm.title.trim();
+    const description = editForm.description.trim();
+    const category = editForm.category.trim();
+    const location = editForm.location.trim();
+    const totalCapacity = Number(editForm.totalCapacity);
+    const ticketPrice = Number(editForm.ticketPrice || 0);
+
+    if (!title || !description || !category || !location) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+
+    if (!editForm.date || !editForm.time) {
+      toast.error("Please select date and time");
+      return;
+    }
+
+    if (!Number.isFinite(totalCapacity) || totalCapacity < 1) {
+      toast.error("Capacity must be at least 1");
+      return;
+    }
+
+    if (!Number.isFinite(ticketPrice) || ticketPrice < 0) {
+      toast.error("Ticket price must be 0 or more");
+      return;
+    }
+
+    try {
+      setIsSavingEdit(true);
+
+      const startDatetime = new Date(
+        `${editForm.date}T${editForm.time}`,
+      ).toISOString();
+
+      const prevStart = event?.startDatetime
+        ? new Date(event.startDatetime).getTime()
+        : NaN;
+      const prevEnd = event?.endDatetime
+        ? new Date(event.endDatetime).getTime()
+        : NaN;
+      const durationMs =
+        Number.isFinite(prevStart) &&
+        Number.isFinite(prevEnd) &&
+        prevEnd > prevStart
+          ? prevEnd - prevStart
+          : 3 * 60 * 60 * 1000;
+      const endDatetime = new Date(
+        new Date(`${editForm.date}T${editForm.time}`).getTime() + durationMs,
+      ).toISOString();
+
+      await updateEventDetails({
+        eventId: String(event.id),
+        title,
+        description,
+        category,
+        startDatetime,
+        endDatetime,
+        timezone: String(event.timezone || "Asia/Kolkata"),
+        venueName: location.split(",")[0] || location,
+        address: location,
+        city: String(event.city || "Pune"),
+        country: String(event.country || "India"),
+        totalCapacity,
+        ticketType: ticketPrice > 0 ? "PAID" : "FREE",
+        ticketPrice,
+        currency: String(event.currency || "INR"),
+        s3URLString: String(
+          event.bannerS3Url || event.s3URLString || event.image || "",
+        ),
+      });
+
+      setEvent((prev: any) => ({
+        ...prev,
+        title,
+        description,
+        category,
+        startDatetime,
+        endDatetime,
+        venueName: location.split(",")[0] || location,
+        address: location,
+        totalCapacity,
+        ticketPrice,
+        ticketType: ticketPrice > 0 ? "PAID" : "FREE",
+      }));
+
+      setIsEditing(false);
+      toast.success("Event updated successfully");
+    } catch (error) {
+      console.error("Failed to update event:", error);
+      toast.error("Failed to update event");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-8">
@@ -249,19 +384,39 @@ export default function OrganizerEventDetailsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          onClick={() => router.push("/dashboard")}
-        >
+        <Button variant="outline" onClick={() => router.push("/dashboard")}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to My Events
         </Button>
 
         <div className="flex gap-2">
+          {canEdit && !isEditing && (
+            <Button
+              variant="secondary"
+              disabled={isUpdatingStatus}
+              onClick={() => setIsEditing(true)}
+            >
+              Edit
+            </Button>
+          )}
+          {canEdit && isEditing && (
+            <>
+              <Button
+                variant="outline"
+                disabled={isSavingEdit}
+                onClick={() => setIsEditing(false)}
+              >
+                Discard Changes
+              </Button>
+              <Button disabled={isSavingEdit} onClick={handleSaveEdit}>
+                {isSavingEdit ? "Saving..." : "Save Changes"}
+              </Button>
+            </>
+          )}
           {status === "DRAFT" && (
             <Button
               variant="outline"
-              disabled={isUpdatingStatus}
+              disabled={isUpdatingStatus || isEditing || isSavingEdit}
               onClick={() => handleStatusChange("PUBLISHED")}
             >
               Publish
@@ -270,7 +425,7 @@ export default function OrganizerEventDetailsPage() {
           {(status === "DRAFT" || status === "PUBLISHED") && (
             <Button
               variant="destructive"
-              disabled={isUpdatingStatus}
+              disabled={isUpdatingStatus || isEditing || isSavingEdit}
               onClick={() => handleStatusChange("CANCELLED")}
             >
               Cancel
@@ -290,48 +445,157 @@ export default function OrganizerEventDetailsPage() {
           />
           <div className="absolute inset-0 bg-linear-to-t from-black/50 via-transparent to-transparent" />
         </div>
-        <CardHeader>    
+        <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-2xl">{event.title}</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                {event.description || "No description"}
-              </p>
+              {isEditing ? (
+                <div className="space-y-3">
+                  <Input
+                    value={editForm.title}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        title: e.target.value,
+                      }))
+                    }
+                    placeholder="Event title"
+                  />
+                  <Input
+                    value={editForm.description}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                    placeholder="Event description"
+                  />
+                </div>
+              ) : (
+                <>
+                  <CardTitle className="text-2xl">{event.title}</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {event.description || "No description"}
+                  </p>
+                </>
+              )}
             </div>
             <Badge variant="outline">{status}</Badge>
           </div>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-muted-foreground" />
-            <span>
-              {event.startDatetime
-                ? new Date(event.startDatetime).toLocaleString()
-                : "Date not set"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-muted-foreground" />
-            <span>
-              {event.venueName ||
-                event.city ||
-                event.address ||
-                "Location not set"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Ticket className="w-4 h-4 text-muted-foreground" />
-            <span>
-              Price: {formatCurrency(Number(event.ticketPrice || 0), "INR")}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Ticket className="w-4 h-4 text-muted-foreground" />
-            <span>
-              Capacity: {Number(event.availableCapacity ?? 0)} /{" "}
-              {Number(event.totalCapacity ?? event.capacity ?? 0)} available
-            </span>
-          </div>
+          {isEditing ? (
+            <>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Date</p>
+                <Input
+                  type="date"
+                  value={editForm.date}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({ ...prev, date: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Time</p>
+                <Input
+                  type="time"
+                  value={editForm.time}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({ ...prev, time: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Category</p>
+                <Input
+                  value={editForm.category}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      category: e.target.value,
+                    }))
+                  }
+                  placeholder="Category"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Location</p>
+                <Input
+                  value={editForm.location}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      location: e.target.value,
+                    }))
+                  }
+                  placeholder="Location"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Ticket Price</p>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm.ticketPrice}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      ticketPrice: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Total Capacity</p>
+                <Input
+                  type="number"
+                  min="1"
+                  value={editForm.totalCapacity}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      totalCapacity: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <span>
+                  {event.startDatetime
+                    ? new Date(event.startDatetime).toLocaleString()
+                    : "Date not set"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-muted-foreground" />
+                <span>
+                  {event.venueName ||
+                    event.city ||
+                    event.address ||
+                    "Location not set"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Ticket className="w-4 h-4 text-muted-foreground" />
+                <span>
+                  Price: {formatCurrency(Number(event.ticketPrice || 0), "INR")}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Ticket className="w-4 h-4 text-muted-foreground" />
+                <span>
+                  Capacity: {Number(event.availableCapacity ?? 0)} /{" "}
+                  {Number(event.totalCapacity ?? event.capacity ?? 0)} available
+                </span>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -54,13 +54,19 @@ export function OrganizerDashboard({
   const totalTickets = safeNumber(stats?.totalTickets);
   const displayName = userDetails?.name?.trim() || "Organizer";
 
-  const safeEvents: Event[] = Array.isArray(events)
+  const normalizedEvents: Event[] = Array.isArray(events)
     ? events
     : Array.isArray(events?.events)
       ? events.events
       : Array.isArray(events?.data)
         ? events.data
         : [];
+
+  const [eventItems, setEventItems] = useState<Event[]>(normalizedEvents);
+
+  useEffect(() => {
+    setEventItems(normalizedEvents);
+  }, [events]);
 
   const getStatus = (event: any) =>
     String(event?.status || "DRAFT").toUpperCase();
@@ -69,7 +75,7 @@ export function OrganizerDashboard({
     () =>
       Array.from(
         new Set(
-          safeEvents
+          eventItems
             .map((event: any) =>
               String(
                 event?.city || event?.venueName || event?.address || "",
@@ -78,10 +84,10 @@ export function OrganizerDashboard({
             .filter(Boolean),
         ),
       ),
-    [safeEvents],
+    [eventItems],
   );
 
-  const filteredEvents = safeEvents.filter((event: any) => {
+  const filteredEvents = eventItems.filter((event: any) => {
     const eventStatus = getStatus(event);
     const eventLocation = String(
       event?.city || event?.venueName || event?.address || "",
@@ -107,7 +113,15 @@ export function OrganizerDashboard({
     try {
       setIsUpdatingStatus(eventId);
       await changeEventStatus(eventId, nextStatus);
+      setEventItems((prev) =>
+        prev.map((event: any) =>
+          String(event.id) === String(eventId)
+            ? { ...event, status: nextStatus }
+            : event,
+        ),
+      );
       toast.success(`Event ${nextStatus.toLowerCase()} successfully`);
+      router.refresh();
     } catch (error) {
       console.error("Failed to update event status:", error);
       toast.error("Failed to update event status");

@@ -30,6 +30,7 @@ import { Spinner } from "@/components/ui/spinner";
 import Link from "next/link";
 import { ArrowLeft, Upload } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { createEvent } from "@/lib/api";
 
 const uuidSchema = z.string().uuid();
 
@@ -87,6 +88,12 @@ export default function CreateEventPage() {
       return;
     }
 
+    const organizerId = uuidSchema.safeParse(session.user.id);
+    if (!organizerId.success) {
+      toast.error("Invalid organizer account. Please log in again.");
+      return;
+    }
+
     if (!imageFile) {
       toast.error("Please upload an image");
       return;
@@ -121,34 +128,20 @@ export default function CreateEventPage() {
         ticketType,
         bannerS3Url: "",
         status: "PUBLISHED",
-        organizerId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        organizerId: organizerId.data,
       };
 
       const formData = new FormData();
 
-      // ✅ FIX 1: Send JSON as Blob (VERY IMPORTANT)
-      formData.append(
-        "data",
-        new Blob([JSON.stringify(eventPayload)], {
-          type: "application/json",
-        }),
-      );
+      // Send JSON payload as plain form field for broad multipart parser compatibility.
+      formData.append("data", JSON.stringify(eventPayload));
 
-      // ✅ FIX 2: Match backend key name EXACTLY
       formData.append("file", imageFile);
+      console.log(formData);
 
-      const response = await fetch("/api/events/create", {
-        method: "POST",
-        body: formData,
-        headers: {
-          "X-User-Id": "123e4567-e89b-12d3-a456-426614174000",
-        },
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to create event");
+      const result = await createEvent(formData);
+      if (result?.error) {
+        throw new Error(result.error);
       }
 
       toast.success("Event created successfully");

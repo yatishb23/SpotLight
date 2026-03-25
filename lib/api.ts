@@ -1,4 +1,23 @@
-import axios from "axios";
+import axios, { AxiosRequestConfig } from "axios";
+import { Updock } from "next/font/google";
+import { log } from "node:console";
+
+type RequestOptions = {
+  cache?: boolean;
+  ttlMs?: number;
+  forceRefresh?: boolean;
+  cacheKey?: string;
+};
+
+type CacheEntry = {
+  data: unknown;
+  expiresAt: number;
+};
+
+const DEFAULT_TTL_MS = 60_000;
+const cacheStore = new Map<string, CacheEntry>();
+const inFlightStore = new Map<string, Promise<unknown>>();
+const EVENT_SNAPSHOT_STORAGE_KEY = "eventsById";
 
 const getAccessToken = () => {
   if (typeof window === "undefined") return null;
@@ -10,56 +29,219 @@ const getAccessToken = () => {
   );
 };
 
-const getAuthConfig = () => {
+const axiosClient = axios.create();
+
+axiosClient.interceptors.request.use((config) => {
   const token = getAccessToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-  if (!token) return {};
+const stableStringify = (input: unknown): string => {
+  if (input === null || input === undefined) return "";
+  if (typeof input !== "object") return String(input);
+  if (Array.isArray(input)) {
+    return `[${input.map((item) => stableStringify(item)).join(",")}]`;
+  }
 
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  };
+  const entries = Object.entries(input as Record<string, unknown>)
+    .filter(([, value]) => value !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  return `{${entries
+    .map(([key, value]) => `${key}:${stableStringify(value)}`)
+    .join("|")}}`;
 };
 
-export const getEventsById = async (eventId: string) => {
+const createCacheKey = (config: AxiosRequestConfig, cacheKey?: string) => {
+  if (cacheKey) return cacheKey;
+  const method = (config.method || "GET").toUpperCase();
+  const url = config.url || "";
+  const paramsKey = stableStringify(config.params);
+  const dataKey = stableStringify(config.data);
+  return `${method}:${url}?params=${paramsKey}&data=${dataKey}`;
+};
+
+const shouldUseCache = (
+  config: AxiosRequestConfig,
+  options?: RequestOptions,
+) => {
+  const method = (config.method || "GET").toUpperCase();
+  if (method !== "GET") return false;
+  return options?.cache !== false;
+};
+
+const getCached = <T>(cacheKey: string): T | null => {
+  const hit = cacheStore.get(cacheKey);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    cacheStore.delete(cacheKey);
+    return null;
+  }
+  return hit.data as T;
+};
+
+const setCached = (cacheKey: string, data: unknown, ttlMs: number) => {
+  cacheStore.set(cacheKey, {
+    data,
+    expiresAt: Date.now() + ttlMs,
+  });
+};
+
+async function requestApi<T = unknown>(
+  config: AxiosRequestConfig,
+  options?: RequestOptions,
+): Promise<T> {
+  const ttlMs = options?.ttlMs ?? DEFAULT_TTL_MS;
+  const useCache = shouldUseCache(config, options);
+  const cacheKey = createCacheKey(config, options?.cacheKey);
+
+  if (useCache && !options?.forceRefresh) {
+    const cached = getCached<T>(cacheKey);
+    if (cached !== null) return cached;
+
+    const inFlight = inFlightStore.get(cacheKey);
+    if (inFlight) return inFlight as Promise<T>;
+  }
+
+  const promise = axiosClient(config).then((response) => response.data as T);
+
+  if (useCache) {
+    inFlightStore.set(cacheKey, promise as Promise<unknown>);
+  }
+
   try {
-    const response = await axios.get(`/api/events/getbyid?id=${eventId}`);
-    return response.data?.data ?? response.data;
+    const data = await promise;
+    if (useCache) {
+      setCached(cacheKey, data, ttlMs);
+    }
+    return data;
+  } finally {
+    if (useCache) {
+      inFlightStore.delete(cacheKey);
+    }
+  }
+}
+
+export const clearApiCache = () => {
+  cacheStore.clear();
+  inFlightStore.clear();
+};
+
+export const invalidateApiCache = (matcher: RegExp | string) => {
+  const matches = (key: string) =>
+    matcher instanceof RegExp ? matcher.test(key) : key.includes(matcher);
+
+  for (const key of cacheStore.keys()) {
+    if (matches(key)) cacheStore.delete(key);
+  }
+
+  for (const key of inFlightStore.keys()) {
+    if (matches(key)) inFlightStore.delete(key);
+  }
+};
+
+export const primeEventSnapshots = (events: Array<Record<string, any>>) => {
+  if (typeof window === "undefined") return;
+  if (!Array.isArray(events) || events.length === 0) return;
+
+  const eventMap = events.reduce(
+    (acc, event) => {
+      const id = event?.id;
+      if (id !== undefined && id !== null) {
+        acc[String(id)] = event;
+      }
+      return acc;
+    },
+    {} as Record<string, unknown>,
+  );
+
+  try {
+    const raw = sessionStorage.getItem(EVENT_SNAPSHOT_STORAGE_KEY);
+    const existing = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    sessionStorage.setItem(
+      EVENT_SNAPSHOT_STORAGE_KEY,
+      JSON.stringify({ ...existing, ...eventMap }),
+    );
+  } catch {
+    // Ignore sessionStorage errors and keep runtime resilient.
+  }
+};
+
+export const getCachedEventSnapshot = <T = unknown>(
+  eventId: string,
+): T | null => {
+  if (typeof window === "undefined" || !eventId) return null;
+
+  try {
+    const raw = sessionStorage.getItem(EVENT_SNAPSHOT_STORAGE_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, unknown>;
+    return (map[String(eventId)] as T) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+export const getEventsById = async (
+  eventId: string,
+  options?: RequestOptions,
+) => {
+  try {
+    const response = await requestApi<any>(
+      {
+        method: "GET",
+        url: "/api/events/getbyid",
+        params: { id: eventId },
+      },
+      options,
+    );
+    return response?.data ?? response;
   } catch (error) {
     console.error("Error fetching event by ID:", error);
     throw error;
   }
 };
 
-export const getEventById = async (eventId: string) => {
-  return getEventsById(eventId);
+export const getEventById = async (
+  eventId: string,
+  options?: RequestOptions,
+) => {
+  return getEventsById(eventId, options);
 };
 
-export const getEventsByOrganizerId = async (organizerId: string) => {
+export const getEventsByOrganizerId = async (
+  organizerId: string,
+  options?: RequestOptions,
+) => {
   try {
-    const response = await axios.get(
-      `/api/events/getbyOrganizer?organizerId=${organizerId}`,
-      getAuthConfig(),
+    return await requestApi(
+      {
+        method: "GET",
+        url: "/api/events/getbyOrganizer",
+        params: { organizerId },
+      },
+      options,
     );
-    return response.data;
   } catch (error) {
     console.error("Error fetching events by organizer ID:", error);
     throw error;
   }
 };
 
-export const getAdminStats = async () => {
+export const getAdminStats = async (options?: RequestOptions) => {
   try {
-    const authConfig = getAuthConfig();
     const response = await Promise.all([
-      axios.get("/api/admin/events"),
-      axios.get("/api/admin/users/getall"),
+      requestApi({ method: "GET", url: "/api/admin/events" }, options),
+      requestApi({ method: "GET", url: "/api/admin/users/getall" }, options),
     ]);
 
     return {
-      events: response[0].data,
-      users: response[1].data,
+      events: response[0],
+      users: response[1],
     };
   } catch (error) {
     console.error("Error fetching admin stats:", error);
@@ -67,43 +249,153 @@ export const getAdminStats = async () => {
   }
 };
 
-export const getUserBookings = async (userId: string) => {
+export const getUserByUid = async (uid: string, options?: RequestOptions) => {
+  return requestApi(
+    {
+      method: "GET",
+      url: "/api/users/getbyuid",
+      params: { id: uid },
+    },
+    options,
+  );
+};
+
+export const getUserById = async (id: string, options?: RequestOptions) => {
+  return requestApi(
+    {
+      method: "GET",
+      url: "/api/users/getbyid",
+      params: { id },
+    },
+    options,
+  );
+};
+
+export const getUserBookings = async (
+  userId: string,
+  options?: RequestOptions,
+) => {
   try {
-    const response = await axios.get(
-      `/api/bookings/getbyuser?id=${userId}`,
-      getAuthConfig(),
+    return await requestApi(
+      {
+        method: "GET",
+        url: "/api/bookings/getbyuser",
+        params: { id: userId },
+      },
+      options,
     );
-    return response.data;
   } catch (error) {
     console.error("Error fetching user bookings:", error);
     throw error;
   }
 };
 
-export const getBookingsByEvent = async (eventId: string) => {
+export const getBookingsByEvent = async (
+  eventId: string,
+  options?: RequestOptions,
+) => {
   try {
-    const response = await axios.get(
-      `/api/bookings/getbyevent?id=${eventId}`,
-      getAuthConfig(),
+    return await requestApi(
+      {
+        method: "GET",
+        url: "/api/bookings/getbyevent",
+        params: { id: eventId },
+      },
+      options,
     );
-    return response.data;
   } catch (error) {
-    console.error("Error fetching user bookings:", error);
+    console.error("Error fetching bookings by event:", error);
     throw error;
   }
+};
+
+export const getAdminUsers = async (options?: RequestOptions) => {
+  return requestApi({ method: "GET", url: "/api/admin/users/getall" }, options);
+};
+
+export const createAdminUser = async (data: {
+  name: string;
+  email: string;
+  role: string;
+  password: string;
+}) => {
+  const response = await requestApi(
+    {
+      method: "POST",
+      url: "/api/admin/users/create",
+      data,
+    },
+    { cache: false },
+  );
+
+  invalidateApiCache(/\/api\/admin\/users\//);
+  return response;
+};
+
+export const updateAdminUserStatus = async (
+  userId: string,
+  active: boolean,
+) => {
+  const response = await requestApi(
+    {
+      method: "PUT",
+      url: `/api/admin/users/${userId}/status`,
+      data: { active },
+    },
+    { cache: false },
+  );
+
+  invalidateApiCache(/\/api\/admin\/users\//);
+  return response;
+};
+
+export const deleteAdminUser = async (userId: string) => {
+  const response = await requestApi(
+    {
+      method: "DELETE",
+      url: `/api/admin/users/${userId}`,
+    },
+    { cache: false },
+  );
+
+  invalidateApiCache(/\/api\/admin\/users\//);
+  return response;
 };
 
 export const changeEventStatus = async (eventId: string, status: string) => {
   try {
-    const response = await axios.post(
-      `/api/admin/events/changestatus`,
+    const response = await requestApi(
       {
-        eventId,
-        status,
+        method: "POST",
+        url: "/api/admin/events/changestatus",
+        data: {
+          eventId,
+          status,
+        },
       },
-      getAuthConfig(),
+      { cache: false },
     );
-    return response.data;
+
+    invalidateApiCache(/\/api\/(events|getbyid|getbyOrganizer|admin\/events)/);
+    if (typeof window !== "undefined") {
+      try {
+        const raw = sessionStorage.getItem(EVENT_SNAPSHOT_STORAGE_KEY);
+        if (raw) {
+          const map = JSON.parse(raw) as Record<string, any>;
+          const current = map[String(eventId)];
+          if (current) {
+            map[String(eventId)] = { ...current, status };
+            sessionStorage.setItem(
+              EVENT_SNAPSHOT_STORAGE_KEY,
+              JSON.stringify(map),
+            );
+          }
+        }
+      } catch {
+        // no-op
+      }
+    }
+    return response;
   } catch (error) {
     console.error("Error changing event status:", error);
     throw error;
@@ -112,11 +404,32 @@ export const changeEventStatus = async (eventId: string, status: string) => {
 
 export const deleteEvent = async (eventId: string) => {
   try {
-    const response = await axios.delete(
-      `/api/admin/events/delete?id=${eventId}`,
-      getAuthConfig(),
+    const response = await requestApi(
+      {
+        method: "DELETE",
+        url: "/api/admin/events/delete",
+        params: { id: eventId },
+      },
+      { cache: false },
     );
-    return response.data;
+
+    invalidateApiCache(/\/api\/(events|getbyid|getbyOrganizer|admin\/events)/);
+    if (typeof window !== "undefined") {
+      try {
+        const raw = sessionStorage.getItem(EVENT_SNAPSHOT_STORAGE_KEY);
+        if (raw) {
+          const map = JSON.parse(raw) as Record<string, unknown>;
+          delete map[String(eventId)];
+          sessionStorage.setItem(
+            EVENT_SNAPSHOT_STORAGE_KEY,
+            JSON.stringify(map),
+          );
+        }
+      } catch {
+        // no-op
+      }
+    }
+    return response;
   } catch (error) {
     console.error("Error deleting event:", error);
     throw error;
@@ -124,13 +437,16 @@ export const deleteEvent = async (eventId: string) => {
 };
 
 export const apiClient = {
-  async getEvents(page = 1, pageSize = 20) {
-    const response = await axios.get("/api/events", {
-      ...getAuthConfig(),
-      params: { page, pageSize },
-    });
+  async getEvents(page = 1, pageSize = 20, options?: RequestOptions) {
+    const payload = await requestApi<any>(
+      {
+        method: "GET",
+        url: "/api/events",
+        params: { page, pageSize },
+      },
+      options,
+    );
 
-    const payload = response.data;
     if (Array.isArray(payload)) {
       return { events: payload, total: payload.length, page, pageSize };
     }
@@ -138,28 +454,339 @@ export const apiClient = {
     return payload;
   },
 
-  async getEventById(eventId: string) {
-    const response = await axios.get(
-      `/api/events/getbyid?id=${eventId}`,
-      getAuthConfig(),
+  async getEventsByCity(city: string, options?: RequestOptions) {
+    return requestApi(
+      {
+        method: "GET",
+        url: "/api/events/getbycity",
+        params: { city },
+      },
+      options,
     );
-    return response.data?.data ?? response.data;
   },
 
-  async getOrganizerEvents(organizerId: string) {
-    return getEventsByOrganizerId(organizerId);
+  async getEventById(eventId: string, options?: RequestOptions) {
+    return getEventById(eventId, options);
   },
 
-  async getUserBookings(userId: string) {
-    const response = await axios.get(
-      `/api/bookings/getbyuser?id=${userId}`,
-      getAuthConfig(),
-    );
-    return response.data;
+  async getUserByUid(uid: string, options?: RequestOptions) {
+    return getUserByUid(uid, options);
+  },
+
+  async getUserById(id: string, options?: RequestOptions) {
+    return getUserById(id, options);
+  },
+
+  async getOrganizerEvents(organizerId: string, options?: RequestOptions) {
+    return getEventsByOrganizerId(organizerId, options);
+  },
+
+  async getUserBookings(userId: string, options?: RequestOptions) {
+    return getUserBookings(userId, options);
+  },
+
+  async getBookingsByEvent(eventId: string, options?: RequestOptions) {
+    return getBookingsByEvent(eventId, options);
+  },
+
+  async getAdminStats(options?: RequestOptions) {
+    return getAdminStats(options);
+  },
+
+  async getAdminUsers(options?: RequestOptions) {
+    return getAdminUsers(options);
+  },
+
+  async createAdminUser(data: {
+    name: string;
+    email: string;
+    role: string;
+    password: string;
+  }) {
+    return createAdminUser(data);
+  },
+
+  async updateAdminUserStatus(userId: string, active: boolean) {
+    return updateAdminUserStatus(userId, active);
+  },
+
+  async deleteAdminUser(userId: string) {
+    return deleteAdminUser(userId);
   },
 
   async bookTicket(data: Record<string, unknown>) {
-    const response = await axios.post("/api/bookings", data, getAuthConfig());
-    return response.data;
+    const response = await requestApi(
+      {
+        method: "POST",
+        url: "/api/bookings",
+        data,
+      },
+      { cache: false },
+    );
+
+    invalidateApiCache(/\/api\/(bookings|events)/);
+    return response;
   },
+};
+export const createEvent = async (formData: FormData) => {
+  try {
+    if (!(formData instanceof FormData) || [...formData.keys()].length === 0) {
+      throw new Error("Event form data is empty");
+    }
+
+    const token = getAccessToken();
+
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    // ✅ 1. Extract file safely
+    const imageFile = formData.get("file");
+
+    if (!(imageFile instanceof File)) {
+      throw new Error("Invalid file");
+    }
+
+    const dataField = formData.get("data");
+    if (typeof dataField !== "string") {
+      throw new Error("Invalid event payload");
+    }
+
+    const payload = JSON.parse(dataField) as {
+      eventId?: string;
+      title: string;
+      description: string;
+      category: string;
+      startDatetime: string;
+      endDatetime: string;
+      timezone: string;
+      venueName: string;
+      address: string;
+      city: string;
+      country: string;
+      totalCapacity: number;
+      ticketType: "FREE" | "PAID";
+      ticketPrice: number;
+      currency: string;
+    };
+
+    const normalizedTicketType: "FREE" | "PAID" =
+      payload.ticketType === "PAID" ? "PAID" : "FREE";
+
+    const uploadJson = await uploadEventImage(imageFile, headers, null);
+    const { uploadUrl, fileUrl, eventId } = uploadJson.data ?? {};
+
+    if (!uploadUrl || !fileUrl) {
+      throw new Error("Upload URL generation failed");
+    }
+
+    await uploadToS3(imageFile, uploadUrl);
+
+    const createPayload = {
+      eventId: eventId || payload.eventId,
+      title: payload.title,
+      description: payload.description,
+      category: payload.category,
+      startDatetime: payload.startDatetime,
+      endDatetime: payload.endDatetime,
+      timezone: payload.timezone,
+      venueName: payload.venueName,
+      address: payload.address,
+      city: payload.city,
+      country: payload.country,
+      totalCapacity: payload.totalCapacity,
+      ticketType: normalizedTicketType,
+      ticketPrice: payload.ticketPrice,
+      currency: payload.currency,
+      s3URLString: fileUrl,
+    };
+
+    const response = await updateEventDetails(createPayload);
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        (result && typeof result === "object" && "error" in result
+          ? String((result as { error?: unknown }).error)
+          : null) || "Failed to create event",
+      );
+    }
+
+    invalidateApiCache(/\/api\/events/);
+    return result;
+  } catch (error) {
+    console.error("Error creating event:", error);
+    throw error;
+  }
+};
+
+const uploadToS3 = async (file: File, uploadUrl: string) => {
+  const res = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type,
+    },
+    body: file,
+  });
+
+  if (!res.ok) {
+    throw new Error("Upload failed");
+  }
+
+  return true;
+};
+
+export const updateEventDetails = async (payload: {
+  eventId: string;
+  title: string;
+  description: string;
+  category: string;
+  startDatetime: string;
+  endDatetime: string;
+  timezone: string;
+  venueName: string;
+  address: string;
+  city: string;
+  country: string;
+  totalCapacity: number;
+  ticketType: "FREE" | "PAID";
+  ticketPrice: number;
+  currency: string;
+  s3URLString: string;
+}) => {
+  const token = getAccessToken();
+
+  const headers: HeadersInit = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const response = await fetch("/api/events/create", {
+    method: "POST",
+    headers: {
+      ...headers,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  invalidateApiCache(/\/api\/(events|getbyid|getbyOrganizer|admin\/events)/);
+  return response;
+};
+
+export const uploadEventImage = async (
+  file: File,
+  headers: HeadersInit,
+  eventId?: string | null,
+) => {
+  let baseUrl = "/api/events/upload";
+  if (eventId) {
+    baseUrl += `?id=${encodeURIComponent(eventId)}`;
+  }
+
+  const uploadResponse = await fetch(baseUrl, {
+    method: "POST",
+    headers: {
+      ...headers,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fileName: file.name.split(".")[0],
+      contentType: file.type,
+      isBanner: true,
+    }),
+  });
+
+  return uploadResponse.json();
+};
+
+export const updateEvent = async (formData: FormData) => {
+  try {
+    if (!(formData instanceof FormData) || [...formData.keys()].length === 0) {
+      throw new Error("Event form data is empty");
+    }
+
+    const token = getAccessToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const imageFile = formData.get("file");
+
+    if (!(imageFile instanceof File)) {
+      throw new Error("Invalid file");
+    }
+
+    const dataField = formData.get("data");
+    if (typeof dataField !== "string") {
+      throw new Error("Invalid event payload");
+    }
+
+    const payload = JSON.parse(dataField) as {
+      eventId?: string;
+      title: string;
+      description: string;
+      category: string;
+      startDatetime: string;
+      endDatetime: string;
+      timezone: string;
+      venueName: string;
+      address: string;
+      city: string;
+      country: string;
+      totalCapacity: number;
+      ticketType: "FREE" | "PAID";
+      ticketPrice: number;
+      currency: string;
+    };
+
+    const normalizedTicketType: "FREE" | "PAID" =
+      payload.ticketType === "PAID" ? "PAID" : "FREE";
+
+    const uploadJson = await uploadEventImage(
+      imageFile,
+      headers,
+      payload.eventId,
+    );
+    const { uploadUrl, fileUrl, eventId } = uploadJson.data ?? {};
+
+    await uploadToS3(imageFile, uploadUrl);
+    const createPayload = {
+      eventId: eventId || payload.eventId,
+      title: payload.title,
+      description: payload.description,
+      category: payload.category,
+      startDatetime: payload.startDatetime,
+      endDatetime: payload.endDatetime,
+      timezone: payload.timezone,
+      venueName: payload.venueName,
+      address: payload.address,
+      city: payload.city,
+      country: payload.country,
+      totalCapacity: payload.totalCapacity,
+      ticketType: normalizedTicketType,
+      ticketPrice: payload.ticketPrice,
+      currency: payload.currency,
+      s3URLString: fileUrl,
+    };
+    const response = await updateEventDetails(createPayload);
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        (result && typeof result === "object" && "error" in result
+          ? String((result as { error?: unknown }).error)
+          : null) || "Failed to create event",
+      );
+    }
+
+    invalidateApiCache(/\/api\/events/);
+    return result;
+  } catch (error) {
+    console.error("Error updating event:", error);
+    throw error;
+  }
 };
