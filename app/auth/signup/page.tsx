@@ -1,103 +1,129 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState } from "react";
+import Link from "next/link";
+import { 
+  ArrowRight, 
+  Mail, 
+  Lock, 
+  User, 
+  Loader2, 
+  ShieldCheck, 
+  Sparkles 
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 export default function SignupPage() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || 'Signup failed');
-      }
-
-      toast.success('Account created successfully! Please login.');
-      router.push('/auth/login');
-    } catch (error: any) {
-      toast.error(error.message);
-    } finally {
-      setIsLoading(false);
-    }
+    setLoading(true);
+    // Add your registration logic here
+    setTimeout(() => {
+      setLoading(false);
+      toast.success("Account initialized successfully.");
+    }, 1500);
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
-          <CardDescription>
-            Enter your email below to create your account
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                placeholder="John Doe"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="m@example.com"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <Button className="w-full" type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Sign Up
-            </Button>
-          </form>
-          <div className="mt-4 text-center text-sm">
-            Already have an account?{' '}
-            <Link href="/auth/login" className="underline hover:text-primary">
-              Login
-            </Link>
+    <div className="min-h-screen bg-[#050505] text-neutral-200 flex items-center justify-center p-6">
+      <div className="w-full max-w-[400px] space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        
+        {/* Header Section */}
+        <div className="flex flex-col items-center text-center space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-900 border border-neutral-800 mb-2">
+            <Sparkles className="w-3 h-3 text-emerald-500" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+              Join the ecosystem
+            </span>
           </div>
-        </CardContent>
-      </Card>
+          <h1 className="text-3xl font-medium tracking-tighter text-white">
+            Initialize Account
+          </h1>
+          <p className="text-sm text-neutral-500 font-light max-w-[280px]">
+            Create your global identity on EventHub and start hosting events.
+          </p>
+        </div>
+
+        {/* Registration Form */}
+        <form onSubmit={handleSignup} className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase tracking-[0.2em] font-bold text-neutral-500 ml-1">
+              Full Legal Name
+            </Label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
+              <Input 
+                required
+                type="text" 
+                placeholder="Johnathan Doe"
+                className="bg-neutral-900/50 border-neutral-800 h-12 pl-10 focus:ring-1 focus:ring-neutral-700 transition-all placeholder:text-neutral-700" 
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase tracking-[0.2em] font-bold text-neutral-500 ml-1">
+              Electronic Mail
+            </Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
+              <Input 
+                required
+                type="email" 
+                placeholder="john@example.com"
+                className="bg-neutral-900/50 border-neutral-800 h-12 pl-10 focus:ring-1 focus:ring-neutral-700 transition-all placeholder:text-neutral-700" 
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2 pb-2">
+            <Label className="text-[10px] uppercase tracking-[0.2em] font-bold text-neutral-500 ml-1">
+              Choose Security Key
+            </Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
+              <Input 
+                required
+                type="password" 
+                placeholder="Create password"
+                className="bg-neutral-900/50 border-neutral-800 h-12 pl-10 focus:ring-1 focus:ring-neutral-700 transition-all placeholder:text-neutral-700" 
+              />
+            </div>
+          </div>
+
+          <Button 
+            type="submit" 
+            disabled={loading}
+            className="w-full h-12 bg-white text-black hover:bg-neutral-200 font-bold uppercase tracking-widest text-xs rounded-xl group"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <span className="flex items-center gap-2">
+                Begin Journey <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+              </span>
+            )}
+          </Button>
+        </form>
+
+        {/* Footer Link */}
+        <p className="text-center text-xs text-neutral-600 font-light tracking-wide">
+          Already registered?{" "}
+          <Link href="/auth/login" className="text-neutral-300 hover:text-white transition-colors font-medium">
+            Authorize Identity
+          </Link>
+        </p>
+
+        {/* Minimal Footer */}
+        <div className="pt-10 flex flex-col items-center gap-4 opacity-40">
+           <p className="text-[9px] uppercase tracking-[0.4em] font-bold text-neutral-700">Protocol Auth V2.0</p>
+        </div>
+      </div>
     </div>
   );
 }

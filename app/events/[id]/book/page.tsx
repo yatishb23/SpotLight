@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -14,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { LoadingState } from "@/components/loading-state";
 import { SeatLayout, type Seat } from "@/components/seat-layout";
 import { toast } from "sonner";
-import { Clock, Info } from "lucide-react";
+import { Clock, Info, ShieldCheck, Ticket, Armchair, ChevronRight, Loader2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Event } from "@/lib/types";
 import { apiClient, createBooking } from "@/lib/api";
@@ -29,21 +28,17 @@ export default function BookingPage() {
   const [seats, setSeats] = useState<Seat[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [timer, setTimer] = useState(300); // 5 minutes in seconds
+  const [isBooking, setIsBooking] = useState(false);
+  const [timer, setTimer] = useState(300);
 
   const carriedTicketPrice = Number(searchParams.get("ticketPrice") || 0);
   const carriedRemainingSeats = Number(searchParams.get("remainingSeats") || 0);
-  const carriedTotalCapacity = Number(searchParams.get("totalCapacity") || 0);
-  const carriedStartDatetime = searchParams.get("startDatetime") || undefined;
-  const carriedVenueName = searchParams.get("venueName") || undefined;
-  const carriedCity = searchParams.get("city") || undefined;
-  const carriedTitle = searchParams.get("title") || undefined;
+  const carriedTitle = searchParams.get("title") || "Event";
 
   useEffect(() => {
-    // Check if user is logged in
     const user = localStorage.getItem("access_token");
     if (!user) {
-      toast.error("Please login to book tickets");
+      toast.error("Authentication required");
       router.push(`/login?redirect=/events/${eventId}/book`);
       return;
     }
@@ -51,56 +46,30 @@ export default function BookingPage() {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-
-        // Use carried data immediately so ticket price and remaining seats are available on first render.
-        if (carriedTitle || carriedTicketPrice || carriedRemainingSeats) {
-          setEvent(
-            (prev) =>
-              prev ??
-              ({
-                id: eventId,
-                title: carriedTitle || "Event",
-                ticketPrice: carriedTicketPrice,
-                availableCapacity: carriedRemainingSeats,
-                totalCapacity: carriedTotalCapacity,
-                startDatetime: carriedStartDatetime,
-                venueName: carriedVenueName,
-                city: carriedCity,
-              } as Event),
-          );
-        }
-
         const eventData = await apiClient.getEventById(eventId);
-        setEvent((eventData?.data ?? eventData) as Event);
+        const normalizedEvent = (eventData?.data ?? eventData) as Event;
+        setEvent(normalizedEvent);
 
-        // Mock seat data fetch
-        // In a real app, adjust this to use the API
         const rows = ["A", "B", "C", "D", "E", "F", "G", "H"];
         const mockSeats: Seat[] = [];
-        const seatPrice =
-          Number((eventData?.data ?? eventData)?.ticketPrice) ||
-          carriedTicketPrice ||
-          50;
+        const seatPrice = Number(normalizedEvent.ticketPrice) || carriedTicketPrice || 50;
 
-        rows.forEach((row, rowIndex) => {
-          const type: Seat["type"] = "General";
-
+        rows.forEach((row) => {
           for (let i = 1; i <= 10; i++) {
-            const status = Math.random() > 0.8 ? "booked" : "available";
+            const status = Math.random() > 0.85 ? "booked" : "available";
             mockSeats.push({
               id: `${row}${i}`,
               row,
               number: i,
               status: status as any,
               price: seatPrice,
-              type: type as any,
+              type: "General" as any,
             });
           }
         });
         setSeats(mockSeats);
       } catch (err) {
-        console.error("Error loading booking data", err);
-        toast.error("Failed to load seating chart");
+        toast.error("Failed to synchronize seating registry");
       } finally {
         setIsLoading(false);
       }
@@ -109,17 +78,14 @@ export default function BookingPage() {
     if (eventId) fetchData();
   }, [eventId, router]);
 
-  // Timer logic
   useEffect(() => {
     if (selectedSeats.length > 0 && timer > 0) {
       const interval = setInterval(() => setTimer((t) => t - 1), 1000);
       return () => clearInterval(interval);
     } else if (timer === 0) {
-      toast.warning("Session Expired", {
-        description: "Your seat hold has expired.",
-      });
+      toast.warning("Session Expired", { description: "Seating hold released." });
       setSelectedSeats([]);
-      setTimer(300); // Reset
+      setTimer(300);
     }
   }, [selectedSeats, timer]);
 
@@ -128,59 +94,44 @@ export default function BookingPage() {
       setSelectedSeats((prev) => prev.filter((id) => id !== seat.id));
     } else {
       if (selectedSeats.length >= 8) {
-        toast.error("Maximum 8 seats allowed per booking");
+        toast.error("Protocol limit: 8 seats per booking");
         return;
       }
-      if (selectedSeats.length === 0) {
-        setTimer(300); // Start timer on first selection
-      }
+      if (selectedSeats.length === 0) setTimer(300);
       setSelectedSeats((prev) => [...prev, seat.id]);
     }
   };
 
-  const calculateTotal = () => {
-    return selectedSeats.reduce((total, id) => {
-      const seat = seats.find((s) => s.id === id);
-      return total + (seat ? seat.price : 0);
-    }, 0);
+  const handleCheckout = async () => {
+    if (selectedSeats.length === 0 || !event) return;
+    setIsBooking(true);
+    try {
+      const totalAmount = selectedSeats.length * (Number(event.ticketPrice) || 0);
+      const response = await createBooking({
+        eventName: event.title || "",
+        eventId,
+        quantity: selectedSeats.length,
+        unitPrice: totalAmount / selectedSeats.length,
+        currency: "INR",
+        seatNo: selectedSeats
+      });
+
+      const result = await response.json();
+      const query = new URLSearchParams({
+        seats: selectedSeats.join(","),
+        amount: totalAmount.toString(),
+        eventId: eventId,
+        eventTitle: event.title || "",
+        bookingId: result?.data?.id || "",
+      }).toString();
+
+      router.push(`/events/${eventId}/book/summary?${query}`);
+    } catch (error) {
+      toast.error("Booking initialization failed");
+    } finally {
+      setIsBooking(false);
+    }
   };
-
-const handleCheckout = async () => {
-  if (selectedSeats.length === 0 || !event) return;
-
-  const totalAmount = calculateTotal();
-
-  // ✅ Convert seats to string format: A1,B10,A5
-  const seatsString = selectedSeats.join(",");
-
-  const response = await createBooking({
-    eventName: event.title || "",
-    eventId,
-    quantity: selectedSeats.length,
-    unitPrice: totalAmount / selectedSeats.length,
-    currency: "INR",
-    seatNo:selectedSeats
-  });
-
-  const result = await response.json();
-
-  const query = new URLSearchParams({
-    seats: seatsString, // ✅ CLEAN STRING
-    amount: totalAmount.toString(),
-    eventId: eventId,
-    eventTitle: event.title || "",
-    eventDate: event.startDatetime || (event as any).date || "",
-    eventVenue: event.venueName || (event as any).location || "",
-    eventCity: event.city || "",
-    ticketPrice: String(Number(event.ticketPrice || 0)),
-    bookingId: result?.data?.id || "",
-  }).toString();
-
-  router.push(`/events/${eventId}/book/summary?${query}`);
-};
-
-  if (isLoading) return <LoadingState />;
-  if (!event) return <div className="p-8 text-center">Event not found</div>;
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -192,128 +143,157 @@ const handleCheckout = async () => {
     new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
-      maximumFractionDigits: 2,
+      maximumFractionDigits: 0,
     }).format(Number(amount || 0));
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#050505] p-8">
+        <LoadingState count={1} type="chart" />
+      </div>
+    );
+  }
+
   return (
-    <div className="container max-w-[1400px] mx-auto py-8 px-4 md:px-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Area: Seat Map */}
-        <div className="lg:col-span-2 space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight mb-2">
-              Select Seats
-            </h1>
-            <div className="flex items-center text-muted-foreground text-sm">
-              <span>{event.title}</span>
-              <span className="mx-2">•</span>
-              <span>{event.venueName || (event as any).location}</span>
-              <span className="mx-2">•</span>
-              <span>
-                {new Date(
-                  event.startDatetime || (event as any).date || new Date(),
-                ).toLocaleDateString()}
-              </span>
+    <div className="min-h-screen bg-[#050505] text-neutral-200 selection:bg-neutral-800 pb-20">
+      {/* Header Info */}
+      <div className="border-b border-neutral-900 bg-black/50 backdrop-blur-md sticky top-0 z-50">
+        <div className="container max-w-[1400px] mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="hidden md:block">
+               <p className="text-[10px] uppercase tracking-[0.3em] text-neutral-600 font-bold mb-1">Seating Protocol</p>
+               <h1 className="text-sm font-bold text-white uppercase tracking-wider">{event?.title}</h1>
             </div>
-            <div className="mt-2 text-sm text-muted-foreground">
-              From{" "}
-              {formatINR(Number(event.ticketPrice || carriedTicketPrice || 0))}{" "}
-              • {Number(event.availableCapacity || carriedRemainingSeats || 0)}{" "}
-              seats left
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="text-right hidden sm:block">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-600 font-bold">Registry Status</p>
+              <p className="text-[11px] text-emerald-500 font-mono">Live Sync Active</p>
+            </div>
+            <div className="h-10 w-[1px] bg-neutral-800 hidden sm:block" />
+            <Badge variant="outline" className="border-neutral-800 text-neutral-400 gap-2 px-4 py-1.5 rounded-full">
+              <Armchair className="w-3 h-3" /> {event?.availableCapacity} Units Left
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      <div className="container max-w-[1400px] mx-auto py-12 px-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+          
+          {/* Main Seating Area */}
+          <div className="lg:col-span-8 space-y-10">
+            <div className="space-y-4">
+               <div className="flex items-center gap-3">
+                  <div className="h-[1px] flex-1 bg-neutral-900" />
+                  <span className="text-[10px] uppercase tracking-[0.5em] text-neutral-500 font-black">Digital Floor Plan</span>
+                  <div className="h-[1px] flex-1 bg-neutral-900" />
+               </div>
+               
+               <div className="bg-[#0a0a0a] border border-neutral-900 rounded-[32px] p-8 md:p-12 overflow-x-auto">
+                 <div className="min-w-[600px]">
+                    <SeatLayout
+                      seats={seats}
+                      onSeatSelect={handleSeatSelect}
+                      selectedSeats={selectedSeats}
+                    />
+                 </div>
+               </div>
+            </div>
+
+            {/* Legend */}
+            <div className="flex justify-center gap-8 text-[10px] uppercase tracking-widest font-bold text-neutral-500">
+               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-neutral-800" /> Reserved</div>
+               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm border border-neutral-700" /> Available</div>
+               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-white" /> Selected</div>
             </div>
           </div>
 
-          <Card className="border-0 shadow-none bg-background">
-            <CardContent className="p-0 overflow-hidden">
-              <SeatLayout
-                seats={seats}
-                onSeatSelect={handleSeatSelect}
-                selectedSeats={selectedSeats}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Sidebar: Summary */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-24">
-            <Card className="shadow-lg border-muted">
-              <CardHeader className="bg-muted/30 pb-4">
-                <CardTitle className="flex justify-between items-center text-lg">
-                  Booking Summary
-                  {selectedSeats.length > 0 && (
-                    <Badge
-                      variant="outline"
-                      className="bg-background text-primary border-primary flex items-center gap-1 font-mono"
-                    >
-                      <Clock className="w-3 h-3" /> {formatTime(timer)}
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                {selectedSeats.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
-                    <p className="text-sm">Please select seats to proceed</p>
+          {/* Sidebar Summary */}
+          <div className="lg:col-span-4">
+            <aside className="sticky top-28">
+              <Card className="bg-neutral-900/40 border-neutral-800 backdrop-blur-xl rounded-[32px] overflow-hidden shadow-2xl">
+                <CardHeader className="p-8 border-b border-neutral-800/50">
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-[10px] uppercase tracking-[0.4em] text-neutral-500 font-black">
+                      Booking Summary
+                    </CardTitle>
+                    {selectedSeats.length > 0 && (
+                      <div className="flex items-center gap-2 text-emerald-500 font-mono text-xs">
+                        <Clock className="w-3 h-3 animate-pulse" /> {formatTime(timer)}
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      {selectedSeats.map((id) => {
-                        const seat = seats.find((s) => s.id === id);
-                        if (!seat) return null;
-                        return (
-                          <div
-                            key={id}
-                            className="flex justify-between text-sm items-center py-1"
-                          >
-                            <div>
-                              <span className="font-semibold">
-                                {seat.row}
-                                {seat.number}
-                              </span>
+                </CardHeader>
+                
+                <CardContent className="p-8 space-y-8">
+                  {selectedSeats.length === 0 ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 opacity-30">
+                      <Ticket className="w-8 h-8" />
+                      <p className="text-[10px] uppercase tracking-widest font-bold">Select units to initialize</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                      <div className="max-h-[200px] overflow-y-auto space-y-3 custom-scrollbar pr-2">
+                        {selectedSeats.map((id) => {
+                          const seat = seats.find((s) => s.id === id);
+                          if (!seat) return null;
+                          return (
+                            <div key={id} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
+                              <div className="flex items-center gap-3">
+                                 <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center text-[10px] font-black">
+                                    {id}
+                                 </div>
+                                 <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-bold">General Access</span>
+                              </div>
+                              <span className="text-sm font-mono text-white">{formatINR(seat.price)}</span>
                             </div>
-                            <span>{formatINR(seat.price)}</span>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
+
+                      <Separator className="bg-neutral-800" />
+
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-end">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-600 font-bold">Total Valuation</p>
+                          <p className="text-3xl font-medium text-white tracking-tighter">{formatINR(selectedSeats.length * (event?.ticketPrice || 0))}</p>
+                        </div>
+                        
+                        <Button
+                          className="w-full h-14 bg-white text-black hover:bg-neutral-200 rounded-2xl font-black uppercase tracking-[0.2em] text-xs transition-all group"
+                          onClick={handleCheckout}
+                          disabled={isBooking}
+                        >
+                          {isBooking ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              Initialize Pass <ChevronRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
+                  )}
 
-                    <Separator />
-
-                    <div className="flex justify-between items-center font-bold text-lg">
-                      <span>Total</span>
-                      <span>{formatINR(calculateTotal())}</span>
+                  <div className="pt-6 border-t border-neutral-800/50 space-y-4">
+                    <div className="flex items-start gap-3 p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10">
+                      <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <p className="text-[10px] leading-relaxed text-neutral-500 uppercase font-bold tracking-tight">
+                        Encrypted selection active. Seats held for 5:00 minutes before release.
+                      </p>
                     </div>
-
-                    <div className="flex justify-between items-center text-sm text-muted-foreground">
-                      <span>Remaining Seats</span>
-                      <span>
-                        {Number(
-                          event.availableCapacity || carriedRemainingSeats || 0,
-                        )}
-                      </span>
-                    </div>
-
-                    <Button
-                      className="w-full mt-4"
-                      size="lg"
-                      onClick={handleCheckout}
-                    >
-                      Book Seats
-                    </Button>
                   </div>
-                )}
+                </CardContent>
+              </Card>
 
-                <div className="text-xs text-muted-foreground mt-4 flex items-start gap-2 bg-primary/10 dark:bg-primary/20 p-3 rounded text-primary">
-                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                  <p>
-                    Seats are reserved for 5 minutes once selected. Please
-                    complete your transaction within this time.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+              <div className="mt-8 text-center opacity-20">
+                <p className="text-[8px] uppercase tracking-[0.5em] text-neutral-500">
+                  Node: hub_seat_registry_v2 // session_secure
+                </p>
+              </div>
+            </aside>
           </div>
         </div>
       </div>

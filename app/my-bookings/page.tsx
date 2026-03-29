@@ -1,198 +1,203 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  CardFooter,
-} from "@/components/ui/card";
+import { useSession } from "next-auth/react";
+import { PDFDownloadLink } from "@react-pdf/renderer";
+import { TicketPDF } from "@/components/TicketPDF";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarDays, MapPin, Clock, Download, Ticket } from "lucide-react";
-import Link from "next/link";
-
-// Mock Data for User Bookings
-const UPCOMING_BOOKINGS = [
-  {
-    id: "BK-123456",
-    eventTitle: "Neon Dreams Concert",
-    date: "2026-03-22",
-    time: "20:00",
-    location: "Madison Square Garden",
-    seats: ["A1", "A2", "A3"],
-    totalAmount: 320.0,
-    status: "confirmed",
-    image: "/images/concert.jpg",
-  },
-];
-
-const PAST_BOOKINGS = [
-  {
-    id: "BK-987654",
-    eventTitle: "Tech Conference 2025",
-    date: "2025-11-15",
-    time: "09:00",
-    location: "Convention Center",
-    seats: ["General Admission"],
-    totalAmount: 150.0,
-    status: "completed",
-    image: "/images/tech.jpg",
-  },
-  {
-    id: "BK-456789",
-    eventTitle: "Standup Comedy Night",
-    date: "2025-10-05",
-    time: "19:30",
-    location: "Comedy Club",
-    seats: ["F12", "F13"],
-    totalAmount: 90.0,
-    status: "completed",
-    image: "/images/comedy.jpg",
-  },
-];
+import { 
+  Sheet, 
+  SheetContent, 
+  SheetHeader, 
+  SheetTitle, 
+  SheetTrigger 
+} from "@/components/ui/sheet";
+import { 
+  Loader2, 
+  Download, 
+  QrCode, 
+  ArrowUpRight, 
+  ShieldCheck,
+  Calendar,Ticket,Wallet,Info
+} from "lucide-react";
+import { getUserBookings } from "@/lib/api";
 
 export default function MyBookingsPage() {
-  const [activeTab, setActiveTab] = useState("upcoming");
+  const { data: session } = useSession();
+  const [bookings, setBookings] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const formatINR = (amount: number) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 2,
-    }).format(Number(amount || 0));
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => setIsLoading(false), 800);
-  }, []);
+    const fetchBookings = async () => {
+      if (!session?.user?.id) return;
+      try {
+        const response = await getUserBookings(session.user.id);
+        setBookings(response.data || []);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchBookings();
+  }, [session?.user?.id]);
 
-  const BookingCard = ({
-    booking,
-    isPast = false,
-  }: {
-    booking: any;
-    isPast?: boolean;
-  }) => (
-    <Card
-      className={`overflow-hidden transition-all hover:shadow-md ${isPast ? "opacity-75 hover:opacity-100" : ""}`}
-    >
-      <div className="flex flex-col md:flex-row">
-        <div className="bg-muted w-full md:w-48 h-32 md:h-auto flex items-center justify-center shrink-0">
-          <Ticket className="w-12 h-12 text-muted-foreground/50" />
-        </div>
-        <div className="flex-1 p-6 flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-start mb-2">
-              <h3 className="font-bold text-xl">{booking.eventTitle}</h3>
-              <Badge
-                variant={
-                  booking.status === "confirmed" ? "default" : "secondary"
-                }
-              >
-                {booking.status}
-              </Badge>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-4 text-sm text-muted-foreground mb-4">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="w-4 h-4" />
-                <span>{new Date(booking.date).toLocaleDateString()}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                <span>{booking.time}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                <span>{booking.location}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Ticket className="w-4 h-4" />
-                <span>
-                  {booking.seats.length} Tickets ({booking.seats.join(", ")})
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-4 border-t mt-2">
-            <span className="font-bold text-lg">
-              {formatINR(booking.totalAmount)}
-            </span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                View Details
-              </Button>
-              {!isPast && (
-                <Button size="sm">
-                  <Download className="w-4 h-4 mr-2" /> Ticket
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-800" />
       </div>
-    </Card>
+    );
+  }
+
+  const DetailItem = ({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon?: React.ReactNode;
+}) => {
+  return (
+    <div className="flex items-start gap-3 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 hover:bg-zinc-900 transition">
+      
+      {/* Icon */}
+      <div className="text-zinc-400 mt-1">
+        {icon}
+      </div>
+
+      {/* Text */}
+      <div className="flex flex-col">
+        <span className="text-xs text-zinc-500 uppercase tracking-wide">
+          {label}
+        </span>
+        <span className="text-sm text-zinc-200 font-medium mt-1">
+          {value}
+        </span>
+      </div>
+    </div>
   );
+};
 
   return (
-    <div className="container max-w-4xl mx-auto py-12 px-4 md:px-6">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">My Bookings</h1>
-        <Button asChild variant="outline">
-          <Link href="/">Browse Events</Link>
-        </Button>
-      </div>
-
-      <Tabs
-        defaultValue="upcoming"
-        className="w-full"
-        onValueChange={setActiveTab}
-      >
-        <TabsList className="mb-8">
-          <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-          <TabsTrigger value="past">Past Events</TabsTrigger>
-        </TabsList>
-
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2].map((i) => (
-              <div key={i} className="h-48 rounded-xl bg-muted animate-pulse" />
-            ))}
+    <div className="min-h-screen bg-[#050505] text-neutral-200 py-20 px-6">
+      <div className="max-w-4xl mx-auto space-y-16">
+        
+        {/* Page Header */}
+        <header className="space-y-4 border-b border-neutral-900 pb-12">
+          <div className="flex items-center gap-2 text-emerald-500">
+            <ShieldCheck className="w-4 h-4" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.3em]">Verified Identity Ledger</span>
           </div>
-        ) : (
-          <>
-            <TabsContent value="upcoming" className="space-y-6">
-              {UPCOMING_BOOKINGS.length > 0 ? (
-                UPCOMING_BOOKINGS.map((booking) => (
-                  <BookingCard key={booking.id} booking={booking} />
-                ))
-              ) : (
-                <div className="text-center py-12 bg-muted/20 rounded-xl border border-dashed">
-                  <Ticket className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium">No upcoming bookings</h3>
-                  <p className="text-muted-foreground mb-4">
-                    You haven't booked any upcoming events yet.
-                  </p>
-                  <Button asChild>
-                    <Link href="/">Browse Events</Link>
-                  </Button>
-                </div>
-              )}
-            </TabsContent>
+          <h1 className="text-5xl font-medium tracking-tighter text-white">My Bookings.</h1>
+        </header>
 
-            <TabsContent value="past" className="space-y-6">
-              {PAST_BOOKINGS.map((booking) => (
-                <BookingCard key={booking.id} booking={booking} isPast />
-              ))}
-            </TabsContent>
-          </>
-        )}
-      </Tabs>
+        {/* Bookings List */}
+        <div className="grid gap-8">
+          {bookings.map((booking) => (
+            <div key={booking.id} className="group relative">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-neutral-800 to-neutral-950 rounded-2xl opacity-0 group-hover:opacity-100 transition duration-500 blur" />
+              <Card className="relative bg-[#050505] border-neutral-900 rounded-2xl overflow-hidden">
+                <div className="flex flex-col md:flex-row">
+                  
+                  {/* Visual Identity (QR Area) */}
+                  <div className="bg-neutral-900/50 p-8 flex items-center justify-center border-b md:border-b-0 md:border-r border-neutral-900">
+                    <div className="relative p-2 bg-white rounded-lg">
+                       <img 
+                          src={`data:image/png;base64,${booking.qr}`} 
+                          alt="Pass QR" 
+                          className="w-24 h-24 grayscale hover:grayscale-0 transition-all duration-500" 
+                        />
+                    </div>
+                  </div>
+
+                  {/* Info Area */}
+                  <div className="flex-1 p-8 flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="space-y-1">
+                        <h3 className="text-2xl font-bold text-white tracking-tight">{booking.eventName}</h3>
+                        <div className="flex items-center gap-4 text-xs text-neutral-500 font-mono">
+                          <span>REF: {booking.id.slice(0, 8)}</span>
+                          <span className="flex items-center gap-1 uppercase"><Calendar className="w-3 h-3"/> {new Date(booking.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      <Badge className="bg-emerald-500/10 text-emerald-500 border-none uppercase text-[9px] tracking-widest px-3 py-1">
+                        {booking.status}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-end justify-between pt-8 border-t border-neutral-900">
+                      <div>
+                        <p className="text-[9px] uppercase tracking-widest text-neutral-600 font-bold mb-1">Pass Value</p>
+                        <p className="text-2xl font-medium text-white tracking-tighter">
+                          {booking.currency} {booking.totalAmount}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <Sheet>
+                        <SheetTrigger asChild>
+                          <Button variant="ghost" className="text-neutral-500 hover:text-white hover:bg-neutral-900 text-[10px] uppercase font-bold tracking-widest">
+                             Details <Info className="w-3 h-3 ml-2" />
+                          </Button>
+                        </SheetTrigger>
+                        <SheetContent className="bg-[#050505] border-neutral-900 text-neutral-200 w-[400px]">
+                          <SheetHeader className="mb-10">
+                            <SheetTitle className="text-white tracking-tighter text-2xl">Pass Details</SheetTitle>
+                          </SheetHeader>
+                          
+                          <div className="space-y-8">
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase text-neutral-500 font-bold tracking-widest">Event Designation</p>
+                              <p className="text-lg font-medium text-white">{booking.eventName}</p>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-6">
+                              <DetailItem label="Quantity" value={`${booking.quantity} Units`} icon={<Ticket size={14}/>} />
+                              <DetailItem label="Registry Date" value={new Date(booking.createdAt).toLocaleDateString()} icon={<Calendar size={14}/>} />
+                              <DetailItem label="Total Paid" value={`${booking.currency} ${booking.totalAmount}`} icon={<Wallet size={14}/>} />
+                              <DetailItem label="Unit Price" value={`${booking.currency} ${booking.unitPrice}`} icon={<ArrowUpRight size={14}/>} />
+                            </div>
+
+                            <div className="p-6 bg-neutral-900/50 rounded-2xl border border-neutral-800 flex flex-col items-center gap-4">
+                               <p className="text-[10px] uppercase text-neutral-500 font-bold tracking-widest">Digital Entry Permit</p>
+                               <div className="bg-white p-3 rounded-lg">
+                                  <img src={`data:image/png;base64,${booking.qr}`} className="w-32 h-32" />
+                               </div>
+                            </div>
+                          </div>
+                        </SheetContent>
+                      </Sheet>
+                        
+                        <PDFDownloadLink
+                          document={<TicketPDF booking={booking} user={session?.user} />}
+                          fileName={`Pass-${booking.id.slice(0, 8)}.pdf`}
+                        >
+                          {({ loading }) => (
+                            <Button 
+                              disabled={loading}
+                              className="bg-white text-black hover:bg-neutral-200 font-bold uppercase text-[10px] tracking-widest px-8 rounded-full h-11"
+                            >
+                              {loading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <span className="flex items-center gap-2">
+                                  Download Pass <Download className="w-3 h-3" />
+                                </span>
+                              )}
+                            </Button>
+                          )}
+                        </PDFDownloadLink>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

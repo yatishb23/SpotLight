@@ -13,9 +13,10 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, ShieldCheck, CreditCard, AlertCircle } from "lucide-react";
+import { Loader2, ShieldCheck, CreditCard, AlertCircle, ArrowLeft, ReceiptText } from "lucide-react";
 import { toast } from "sonner";
 import { createOrder, verifyPayment } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
 
 declare global {
   interface Window {
@@ -33,7 +34,6 @@ export default function BookingSummaryPage() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [order, setOrder] = useState<any>(null);
 
-  // ✅ FIXED seat parsing
   const {
     selectedSeats,
     bookingId,
@@ -44,14 +44,12 @@ export default function BookingSummaryPage() {
     baseAmount,
   } = useMemo(() => {
     const seatsData = searchParams.get("seats");
-
-    // seats like "A1,A2,A3"
     const parsedSeats = seatsData ? seatsData.split(",") : [];
 
     return {
       selectedSeats: parsedSeats,
       bookingId: searchParams.get("bookingId") || "",
-      eventTitle: searchParams.get("eventTitle") || "Selected Event",
+      eventTitle: searchParams.get("eventTitle") || "Authorized Event",
       eventDate: searchParams.get("eventDate") || "",
       eventVenue: searchParams.get("eventVenue") || "",
       eventCity: searchParams.get("eventCity") || "",
@@ -66,16 +64,15 @@ export default function BookingSummaryPage() {
     new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
+      maximumFractionDigits: 0,
     }).format(amount);
 
-  // ✅ Create order
   useEffect(() => {
     if (!bookingId || order) return;
 
     const initOrder = async () => {
       try {
         setIsInitializing(true);
-
         const response = await createOrder({
           bookingId,
           amount: totalAmount,
@@ -83,12 +80,10 @@ export default function BookingSummaryPage() {
         });
 
         if (!response) throw new Error("Order creation failed");
-
         const result = await response.json();
         setOrder(result.data);
       } catch (err) {
-        console.error(err);
-        toast.error("Failed to initialize payment");
+        toast.error("Financial synchronization failed");
       } finally {
         setIsInitializing(false);
       }
@@ -97,15 +92,9 @@ export default function BookingSummaryPage() {
     initOrder();
   }, [bookingId, totalAmount, order]);
 
-  // ✅ Razorpay handler
   const handleRazorpayPayment = useCallback(async () => {
-    if (!window.Razorpay) {
-      toast.error("Razorpay SDK not loaded");
-      return;
-    }
-
-    if (!order?.orderId) {
-      toast.error("Order not ready");
+    if (!window.Razorpay || !order?.orderId) {
+      toast.error("Payment gateway offline");
       return;
     }
 
@@ -115,10 +104,9 @@ export default function BookingSummaryPage() {
       key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
       amount: order.amountInPaise,
       currency: order.currency || "INR",
-      name: "Event Platform",
-      description: `Booking for ${eventTitle}`,
+      name: "EventHub.",
+      description: `Access Token: ${eventTitle}`,
       order_id: order.orderId,
-
       handler: async function (response: any) {
         try {
           const verify = await verifyPayment({
@@ -130,29 +118,18 @@ export default function BookingSummaryPage() {
           });
 
           if (verify) {
-            toast.success("Payment Verified!");
-            router.push(
-              `/events/${eventId}/book/confirmation?bookingId=${bookingId}`
-            );
+            toast.success("Transaction Secure");
+            router.push(`/events/${eventId}/book/confirmation?bookingId=${bookingId}`);
           }
         } catch (err) {
-          console.error(err);
           toast.error("Verification failed");
         } finally {
           setIsLoading(false);
         }
       },
-
-      prefill: {
-        email: "user@example.com",
-        contact: "9999999999",
-      },
-
-      theme: { color: "#3b82f6" },
-
-      modal: {
-        ondismiss: () => setIsLoading(false),
-      },
+      prefill: { email: "user@example.com", contact: "9999999999" },
+      theme: { color: "#000000" },
+      modal: { ondismiss: () => setIsLoading(false) },
     };
 
     const rzp = new window.Razorpay(options);
@@ -161,120 +138,107 @@ export default function BookingSummaryPage() {
 
   if (!searchParams.get("seats")) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-        <AlertCircle className="w-12 h-12 text-destructive" />
-        <p className="text-muted-foreground">
-          No active booking session found.
-        </p>
-        <Button onClick={() => router.push(`/events/${eventId}`)}>
-          Return to Event
+      <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center gap-6 text-neutral-400">
+        <AlertCircle className="w-12 h-12 text-neutral-800" />
+        <p className="text-[10px] uppercase tracking-[0.3em] font-bold">Session Identity Lost</p>
+        <Button variant="outline" className="border-neutral-800 hover:bg-neutral-900" onClick={() => router.push(`/events/${eventId}`)}>
+          Return to Terminal
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="container max-w-2xl mx-auto py-12 px-4">
-      <Script
-        src="https://checkout.razorpay.com/v1/checkout.js"
-        strategy="lazyOnload"
-      />
+    <div className="min-h-screen bg-[#050505] text-neutral-200 py-20 px-6">
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
 
-      <Card className="border-2 shadow-lg">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">
-            Confirm Your Booking
-          </CardTitle>
-          <CardDescription>
-            Review your details before payment
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent className="space-y-6">
-          {/* Event Info */}
-          <div className="bg-primary/5 p-4 rounded-xl border">
-            <h3 className="font-bold text-lg">{eventTitle}</h3>
-            <p className="text-sm text-muted-foreground">
-              📅{" "}
-              {eventDate
-                ? new Date(eventDate).toLocaleDateString("en-IN")
-                : "Date TBD"}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              📍 {eventVenue}
-              {eventCity ? `, ${eventCity}` : ""}
-            </p>
+      <div className="max-w-xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="flex flex-col items-center text-center space-y-4 mb-12">
+          <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center mb-2">
+            <ReceiptText className="text-black w-6 h-6" />
           </div>
+          <h1 className="text-4xl font-medium tracking-tighter text-white italic">Settlement Summary.</h1>
+          <p className="text-[10px] uppercase tracking-[0.4em] text-neutral-500 font-bold">Review Transaction Metadata</p>
+        </div>
 
-          {/* Seats */}
-          <div>
-            <h3 className="font-semibold mb-3 flex justify-between">
-              <span>Seats</span>
-              <span className="text-sm text-muted-foreground">
-                {selectedSeats.length} Tickets
-              </span>
-            </h3>
-
-            <div className="space-y-2">
-              {selectedSeats.map((seat: string, index: number) => (
-                <div
-                  key={`${seat}-${index}`} // ✅ FIXED
-                  className="flex justify-between text-sm border-b py-2"
-                >
-                  <span>Seat {seat}</span>
-                  <span>
-                    {formatINR(baseAmount / selectedSeats.length)}
-                  </span>
-                </div>
-              ))}
+        <Card className="bg-neutral-900/40 border-neutral-800 backdrop-blur-xl rounded-[32px] overflow-hidden shadow-2xl">
+          <CardContent className="p-10 space-y-10">
+            {/* Event Block */}
+            <div className="space-y-1">
+              <p className="text-[9px] uppercase tracking-[0.2em] text-neutral-600 font-bold">Access Designation</p>
+              <h3 className="text-2xl font-bold text-white tracking-tight leading-tight">{eventTitle}</h3>
+              <div className="flex gap-4 pt-2 text-[11px] text-neutral-500 font-mono">
+                <span>{eventDate ? new Date(eventDate).toLocaleDateString("en-IN") : "DATE_TBD"}</span>
+                <span className="text-neutral-800">|</span>
+                <span>{eventVenue}</span>
+              </div>
             </div>
+
+            <Separator className="bg-neutral-800/50" />
+
+            {/* Units Block */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-end">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-600 font-bold">Allocated Units</p>
+                <Badge variant="outline" className="border-neutral-800 text-neutral-400">{selectedSeats.length} Tickets</Badge>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-2">
+                {selectedSeats.map((seat, i) => (
+                  <div key={i} className="px-3 py-1 bg-white/5 border border-white/5 rounded-lg text-[10px] font-mono text-neutral-400 uppercase tracking-tighter">
+                    UNIT_{seat}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Financial Ledger */}
+            <div className="bg-[#050505]/50 rounded-2xl p-6 border border-neutral-800/50 space-y-4">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-neutral-500 uppercase tracking-widest font-bold">Subtotal</span>
+                <span className="font-mono text-neutral-300">{formatINR(baseAmount)}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-neutral-500 uppercase tracking-widest font-bold">Convenience Fee</span>
+                <span className="font-mono text-neutral-300">{formatINR(convenienceFee)}</span>
+              </div>
+              <Separator className="bg-neutral-800/50" />
+              <div className="flex justify-between items-end">
+                <span className="text-[10px] uppercase tracking-[0.4em] text-white font-black">Final Valuation</span>
+                <span className="text-3xl font-medium text-white tracking-tighter">{formatINR(totalAmount)}</span>
+              </div>
+            </div>
+          </CardContent>
+
+          <CardFooter className="p-10 pt-0 flex flex-col gap-4">
+            <Button
+              onClick={handleRazorpayPayment}
+              disabled={isLoading || isInitializing || !order}
+              className="w-full h-16 bg-white text-black hover:bg-neutral-200 rounded-2xl font-black uppercase tracking-[0.2em] text-xs transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+            >
+              {isLoading || isInitializing ? (
+                <Loader2 className="animate-spin w-5 h-5" />
+              ) : (
+                <span className="flex items-center gap-2">
+                   Authorize Payment <CreditCard className="w-4 h-4" />
+                </span>
+              )}
+            </Button>
+
+            <Button variant="ghost" onClick={() => router.back()} className="text-[10px] text-neutral-600 uppercase tracking-widest hover:text-white transition-colors">
+              <ArrowLeft className="w-3 h-3 mr-2" /> Adjust Selection
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {/* Security Footer */}
+        <div className="flex flex-col items-center gap-4 opacity-30">
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-neutral-800">
+            <ShieldCheck className="w-3 h-3 text-emerald-500" />
+            <span className="text-[8px] font-bold uppercase tracking-[0.3em] text-neutral-500">AES-256 Bit Encryption Active</span>
           </div>
-
-          {/* Price */}
-          <div className="space-y-3 p-4 bg-muted/20 rounded-lg">
-            <div className="flex justify-between text-sm">
-              <span>Subtotal</span>
-              <span>{formatINR(baseAmount)}</span>
-            </div>
-
-            <div className="flex justify-between text-sm">
-              <span>Convenience Fee</span>
-              <span>{formatINR(convenienceFee)}</span>
-            </div>
-
-            <Separator />
-
-            <div className="flex justify-between font-bold">
-              <span>Total</span>
-              <span>{formatINR(totalAmount)}</span>
-            </div>
-
-            <p className="text-xs flex items-center gap-1 text-green-600">
-              <ShieldCheck className="w-3 h-3" /> Secure Payment
-            </p>
-          </div>
-        </CardContent>
-
-        <CardFooter className="flex flex-col gap-3">
-          <Button
-            onClick={handleRazorpayPayment}
-            disabled={isLoading || isInitializing || !order}
-            className="w-full h-14 text-lg"
-          >
-            {isLoading || isInitializing ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <>
-                <CreditCard className="mr-2" /> Pay Now
-              </>
-            )}
-          </Button>
-
-          <Button variant="ghost" onClick={() => router.back()}>
-            Go Back
-          </Button>
-        </CardFooter>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

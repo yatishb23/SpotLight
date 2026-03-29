@@ -247,6 +247,21 @@ export const getAdminStats = async (options?: RequestOptions) => {
   }
 };
 
+export const getEvents = async () => {
+  try{
+    const response = await fetch("/api/events", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response.json();
+  }
+  catch(error){
+    console.error("Error fetching events:", error);
+    throw error;
+  }
+}
 export const getUserByUid = async (uid: string, options?: RequestOptions) => {
   return requestApi(
     {
@@ -269,19 +284,16 @@ export const getUserById = async (id: string, options?: RequestOptions) => {
   );
 };
 
-export const getUserBookings = async (
-  userId: string,
-  options?: RequestOptions,
-) => {
+export const getUserBookings = async (userId: string,) => {
   try {
-    return await requestApi(
-      {
-        method: "GET",
-        url: "/api/bookings/getbyuser",
-        params: { id: userId },
+    const response = await fetch("/api/bookings/getbyuser?userId="+encodeURIComponent(userId), {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`,
       },
-      options,
-    );
+    });
+    return response.json();
   } catch (error) {
     console.error("Error fetching user bookings:", error);
     throw error;
@@ -443,10 +455,6 @@ export const apiClient = {
 
   async getOrganizerEvents(organizerId: string, options?: RequestOptions) {
     return getEventsByOrganizerId(organizerId, options);
-  },
-
-  async getUserBookings(userId: string, options?: RequestOptions) {
-    return getUserBookings(userId, options);
   },
 
   async getBookingsByEvent(eventId: string, options?: RequestOptions) {
@@ -965,3 +973,70 @@ export const updateOrderStatus = async (bookingId: string) => {
         console.error("Error updating order status:", error);
     }
 };
+
+export const changePassword = async (userId: string, currentPassword: string, newPassword: string) => {
+  try {
+    const response = await fetch("/api/users/changepassword", { 
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`,
+      },
+      body: JSON.stringify({userId, currentPassword, newPassword }),
+    });
+    return response.json();
+  } catch (error) {
+    console.error("Error changing password:", error);
+    throw error;
+  }
+}
+
+export const checkUserExistence = async (email: string, otp: string) => {
+  try {
+    const response = await fetch("/api/users/exist", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, otp }),
+    });
+    return response.json();
+  } catch (error) {
+    console.error("Error checking user existence:", error);
+    throw error;
+  }
+};
+
+export const sendOTP = async (email: string) => {
+  try {
+    const response = await fetch("/api/mail/send-otp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email }),
+    });
+    return response.json();
+  }
+  catch (error) {
+    console.error("Error sending OTP:", error);
+    throw error;
+  }
+}
+
+export const resetPassword = async (email: string, newPassword: string) => {
+  try {
+    const response = await fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, newPassword }),
+    });
+    return response.json();
+  } catch (error) {
+    console.error("Error resetting password:", error);
+    throw error;
+  }
+};
+

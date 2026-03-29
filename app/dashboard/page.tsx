@@ -7,9 +7,10 @@ import type { DashboardUserDetails } from "@/lib/types";
 import { OrganizerDashboard } from "@/components/dashboard/organizer-dashboard";
 import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
 import { useSession } from "next-auth/react";
-import { apiClient } from "@/lib/api";
+import axios from "axios";
+import { getEventsByOrganizerId, getAdminStats } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { LayoutDashboard, ShieldCheck, UserCircle } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, UserCircle, Activity } from "lucide-react";
 
 type DashboardStats = {
   totalEvents: number;
@@ -33,19 +34,15 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ Redirect normal users
+  // ✅ Redirect Logic
   useEffect(() => {
     if (!session) return;
-
     let role = session.user.role?.toLowerCase() || "user";
     if (role === "super_admin") role = "admin";
-
-    if (role === "user") {
-      router.replace("/");
-    }
+    if (role === "user") router.replace("/");
   }, [session, router]);
 
-  // ✅ Fetch Data
+  // ✅ Fetch Data Logic
   useEffect(() => {
     const fetchData = async () => {
       if (!session?.user) return;
@@ -58,32 +55,10 @@ export default function DashboardPage() {
         if (role === "super_admin") role = "admin";
 
         const userId = session.user.id;
+        const userResponse = await axios.get(
+          `/api/users/getbyuid?id=${encodeURIComponent(userId)}`
+        );
 
-        if (role === "admin") {
-          const [userResponse, adminData] = (await Promise.all([
-            apiClient.getUserByUid(userId),
-            apiClient.getAdminStats(),
-          ])) as [any, any];
-
-          const normalizedUserDetails =
-            userResponse.data?.data ??
-            userResponse.data?.user ??
-            userResponse.data;
-          setUserDetails(normalizedUserDetails ?? null);
-
-          setAdminStats(adminData);
-
-          const statsSource = adminData?.events?.data ?? adminData?.events;
-
-          setStats({
-            totalEvents: Number(statsSource?.totalEvents ?? statsSource?.eventsCount ?? 0),
-            totalRevenue: Number(statsSource?.totalRevenue ?? statsSource?.revenue ?? 0),
-            totalTickets: Number(statsSource?.totalTickets ?? statsSource?.ticketsSold ?? 0),
-          });
-          return;
-        }
-
-        const userResponse = (await apiClient.getUserByUid(userId)) as any;
         const normalizedUserDetails =
           userResponse.data?.data ??
           userResponse.data?.user ??
@@ -92,24 +67,35 @@ export default function DashboardPage() {
         setUserDetails(normalizedUserDetails ?? null);
 
         if (role === "organizer") {
-          const eventsData = (await apiClient.getOrganizerEvents(
-            normalizedUserDetails?.organizerId || userId,
-          )) as any;
-
+          const eventsData = await getEventsByOrganizerId(
+            normalizedUserDetails?.organizerId || userId
+          );
           setOrganizerData(eventsData);
-
           const organizerEvents = Array.isArray(eventsData)
             ? eventsData
-            : Array.isArray(eventsData?.events)
-              ? eventsData.events
-              : Array.isArray(eventsData?.data)
-                ? eventsData.data
-                : [];
+            : (typeof eventsData === "object" && eventsData !== null && "events" in eventsData && Array.isArray((eventsData as any).events))
+            ? (eventsData as any).events
+            : Array.isArray((eventsData as any)?.data)
+            ? (eventsData as any).data
+            : [];
 
           setStats({
             totalEvents: organizerEvents.length,
             totalRevenue: 0,
             totalTickets: 0,
+          });
+        } else if (role === "admin") {
+          const adminData = await getAdminStats();
+          setAdminStats(adminData);
+          const events = adminData?.events;
+          const statsSource =
+            events && typeof events === "object" && "data" in events
+              ? (events as any).data
+              : events;
+          setStats({
+            totalEvents: Number(statsSource?.totalEvents ?? statsSource?.eventsCount ?? 0),
+            totalRevenue: Number(statsSource?.totalRevenue ?? statsSource?.revenue ?? 0),
+            totalTickets: Number(statsSource?.totalTickets ?? statsSource?.ticketsSold ?? 0),
           });
         }
       } catch (err) {
@@ -119,9 +105,7 @@ export default function DashboardPage() {
       }
     };
 
-    if (session) {
-      fetchData();
-    }
+    if (session) fetchData();
   }, [session]);
 
   if (!session) return <LoadingState />;
@@ -130,48 +114,56 @@ export default function DashboardPage() {
   if (role === "super_admin") role = "admin";
   if (role === "user") return <LoadingState />;
 
-  // ✅ Normalizing data for components
+  // ✅ Normalization
   const adminUsers = Array.isArray(adminStats?.users) ? adminStats.users : adminStats?.users?.data || [];
   const adminEvents = Array.isArray(adminStats?.events) ? adminStats.events : adminStats?.events?.events || adminStats?.events?.data || [];
   const organizerEvents = Array.isArray(organizerData) ? organizerData : organizerData?.events || organizerData?.data || [];
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-[#0a0a0a] text-neutral-200 selection:bg-neutral-800">
+      <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         
-        {/* Header Section */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-900 pb-8">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-blue-500 mb-1">
-              <LayoutDashboard className="w-5 h-5" />
-              <span className="text-xs font-bold uppercase tracking-widest">Control Center</span>
+        {/* Minimalist Header */}
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12 border-b border-neutral-900 pb-10">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-900 border border-neutral-800">
+              <Activity className="w-3.5 h-3.5 text-neutral-400" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+                System Status: Operational
+              </span>
             </div>
-            <h1 className="text-4xl font-extrabold tracking-tight">Dashboard</h1>
-            <div className="flex items-center gap-2 text-neutral-400">
-              {role === "admin" ? (
-                <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              ) : (
-                <UserCircle className="w-4 h-4 text-blue-500" />
-              )}
-              <p className="text-sm font-medium">
-                {role === "admin" ? "System Administration Mode" : `Organizer Portal: ${session.user.name}`}
-              </p>
+            
+            <div className="space-y-1">
+              <h1 className="text-4xl font-medium tracking-tight text-white">
+                Dashboard
+              </h1>
+              <div className="flex items-center gap-2 text-neutral-500">
+                {role === "admin" ? (
+                  <ShieldCheck className="w-4 h-4 text-emerald-500/80" />
+                ) : (
+                  <UserCircle className="w-4 h-4 text-blue-500/80" />
+                )}
+                <p className="text-sm font-light">
+                  {role === "admin" ? "Internal Administrator Access" : `Management Portal — ${session.user.name}`}
+                </p>
+              </div>
             </div>
           </div>
-          
-          <div className="hidden md:block">
-             <div className="px-4 py-2 rounded-full bg-neutral-900/50 border border-neutral-800 text-xs font-mono text-neutral-500">
-                Last Updated: {new Date().toLocaleTimeString()}
-             </div>
+
+          <div className="hidden md:block text-right">
+            <p className="text-[10px] uppercase tracking-widest text-neutral-600 font-bold mb-1">Last Updated</p>
+            <p className="text-sm font-mono text-neutral-400">
+              {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
           </div>
         </header>
 
         {/* Content Section */}
         <main className="relative">
           {error && (
-            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="animate-in fade-in slide-in-from-top-4 duration-500">
               <ErrorFallback
-                title="System Interruption"
+                title="Interface Interruption"
                 message={error}
                 onRetry={() => window.location.reload()}
               />
@@ -179,12 +171,12 @@ export default function DashboardPage() {
           )}
 
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 space-y-4">
-               <LoadingState />
-               <p className="text-neutral-500 animate-pulse text-sm">Synchronizing your data...</p>
+            <div className="flex flex-col items-center justify-center py-24 space-y-4">
+              <LoadingState />
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-600 animate-pulse">Synchronizing Data</p>
             </div>
           ) : (
-            <div className="animate-in fade-in duration-500">
+            <div className="animate-in fade-in duration-700">
               {role === "organizer" && (
                 <OrganizerDashboard
                   stats={stats}
@@ -203,8 +195,8 @@ export default function DashboardPage() {
               )}
 
               {!["organizer", "admin"].includes(role) && (
-                <div className="text-center py-20 bg-neutral-900/20 border border-dashed border-neutral-800 rounded-3xl">
-                  <p className="text-neutral-500 italic">Unknown access level detected: {role}</p>
+                <div className="flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-neutral-800">
+                  <p className="text-neutral-500 italic">Unidentified access level: {role}</p>
                 </div>
               )}
             </div>

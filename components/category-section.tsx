@@ -1,16 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { motion } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
 import { EventCard } from '@/components/event-card'; 
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import type { Event } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface CategorySectionProps {
   title: string;
-  events: Event[];
+  events: any[];
   className?: string;
   viewAllLink?: string;
   background?: 'default' | 'muted' | 'subtle';
@@ -18,43 +16,47 @@ interface CategorySectionProps {
 
 export function CategorySection({ 
     title, 
-    events, 
+    events = [], 
     className, 
     viewAllLink = "#",
     background = "default" 
 }: CategorySectionProps) {
+  
   if (!events || events.length === 0) return null;
 
   return (
     <section className={cn(
-        "py-8 md:py-12 border-b last:border-0", 
-        background === 'muted' && "bg-muted/30",
-        background === 'subtle' && "bg-primary/5",
+        "py-10 border-b border-zinc-900 last:border-0", 
+        background === 'muted' && "bg-zinc-900/30",
+        background === 'subtle' && "bg-zinc-100/[0.01]",
         className
     )}>
-      <div className="w-full max-w-[1400px] mx-auto px-4 md:px-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2">
-            <span className="w-1.5 h-6 bg-primary rounded-full inline-block"></span>
-            {title}
-          </h2>
+      <div className="w-full max-w-[1440px] mx-auto px-4 md:px-8">
+        <div className="flex items-end justify-between mb-8">
+          <div className="space-y-1">
+            <h2 className="text-lg md:text-xl font-bold tracking-tight text-zinc-100 uppercase italic">
+              {title}
+            </h2>
+            <div className="h-0.5 w-10 bg-zinc-100 rounded-full" />
+          </div>
+          
           <Link 
             href={viewAllLink} 
-            className="text-primary text-sm font-medium flex items-center hover:underline group"
+            className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center hover:text-zinc-100 transition-colors group"
           >
-            See all <ChevronRight className="w-4 h-4 ml-0.5 transition-transform group-hover:translate-x-0.5" />
+            Explore <ChevronRight className="w-3 h-3 ml-1 transition-transform group-hover:translate-x-1" />
           </Link>
         </div>
         
-        <ScrollArea className="w-full whitespace-nowrap -mx-4 px-4 sm:overflow-visible sm:px-0">
-          <div className="flex space-x-4 pb-4">
+        <ScrollArea className="w-full whitespace-nowrap">
+          <div className="flex space-x-6 pb-6">
             {events.map((event) => (
-              <div key={event.id} className="w-[160px] md:w-[200px] flex-none">
-                <EventCard event={event} variant="portrait" />
+              <div key={event.id || event._id} className="w-[180px] md:w-[220px] shrink-0">
+                <EventCard event={event} />
               </div>
             ))}
           </div>
-          <ScrollBar orientation="horizontal" className="invisible sm:visible" />
+          <ScrollBar orientation="horizontal" className="bg-zinc-800/40" />
         </ScrollArea>
       </div>
     </section>

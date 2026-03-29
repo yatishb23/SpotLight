@@ -76,7 +76,7 @@ const handler = NextAuth({
             const role = (data.user.role || 'user').toLowerCase();
             return {
               id: data.user.id,
-              name: data.user.name,
+              name: data.user.fullName,
               email: data.user.email,
               role: role,
               image: data.user.image,
@@ -150,7 +150,10 @@ const handler = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.role = token.role as string;        session.user.accessToken = token.accessToken as string;      }
+        session.user.role = token.role as string;        
+        session.user.accessToken = token.accessToken as string;
+        session.user.name = session.user.name || "User"; 
+      }
       return session;
     }
   },

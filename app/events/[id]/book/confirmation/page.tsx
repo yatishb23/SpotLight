@@ -1,81 +1,70 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useSearchParams, useRouter, useParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CheckCircle2, Download, Share2, Loader2 } from "lucide-react";
+import { 
+  CheckCircle2, 
+  Download, 
+  Share2, 
+  Loader2, 
+  ArrowRight, 
+  ShieldCheck, 
+  Ticket as TicketIcon,
+  Home
+} from "lucide-react";
 import { updateOrderStatus } from "@/lib/api";
+import { useSession } from "next-auth/react";
+import { PDFDownloadLink } from "@react-pdf/renderer";
+import { TicketPDF } from "@/components/TicketPDF";
 
 export default function BookingConfirmationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
   
-  // Extract query parameters
   const bookingId = searchParams.get("bookingId");
-  const totalAmount = searchParams.get("total");
-
   const [isLoading, setIsLoading] = useState(true);
-  const [qrUrl, setQrUrl] = useState<string | null>(null);
-  
-  // ✅ 1. The "Lock": Persists across renders without triggering them
+  const [bookingData, setBookingData] = useState<any>(null);
   const hasCalledUpdate = useRef(false);
 
   const formatINR = (amount: number) =>
     new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
-      maximumFractionDigits: 2,
+      maximumFractionDigits: 0,
     }).format(Number(amount || 0));
 
   useEffect(() => {
-    const updatePaymentStatus = async () => {
-      // ✅ 2. The Guard: Stop if bookingId is missing OR if already executed
+    const syncBooking = async () => {
       if (!bookingId || hasCalledUpdate.current) return;
-
       try {
-        // ✅ 3. Close the lock immediately
         hasCalledUpdate.current = true;
-        
-        console.log("Syncing booking status for ID:", bookingId);
-        
         const response = await updateOrderStatus(bookingId);
-
-        const qrData = response?.data?.qr?.[0];
-        console.log(qrData);
-        
-        if (qrData) {
-          // Handle Base64
-          setQrUrl(`data:image/png;base64,${qrData}`);
-        } else if (response?.data?.qrS3Url) {
-          // Handle S3 URL
-          setQrUrl(response.data.qrS3Url);
-        }
+        setBookingData(response?.data);
       } catch (error) {
-        console.error("Error updating payment status:", error);
-        // Optional: hasCalledUpdate.current = false; // Uncomment if you want to allow retry on error
+        console.error("Sync Error:", error);
       } finally {
         setIsLoading(false);
       }
     };
-
-    updatePaymentStatus();
-  }, [bookingId]); // Only re-run if bookingId string actually changes
+    syncBooking();
+  }, [bookingId]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 text-primary animate-spin opacity-20" />
-          <p className="text-muted-foreground animate-pulse font-medium">
-            Finalizing your tickets...
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-6">
+          <Loader2 className="h-10 w-10 text-white animate-spin opacity-20" />
+          <p className="text-[10px] uppercase tracking-[0.4em] text-neutral-500 font-bold animate-pulse">
+            Finalizing Identity Ledger
           </p>
         </div>
       </div>
@@ -83,104 +72,131 @@ export default function BookingConfirmationPage() {
   }
 
   return (
-    <div className="container max-w-2xl mx-auto py-12 px-4 md:px-6">
-      <Card className="border-green-500/20 bg-green-50/10 dark:bg-green-900/10 overflow-hidden shadow-xl relative">
-        {/* Top Accent Bar */}
-        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-emerald-600" />
-
-        <CardHeader className="text-center pb-2">
-          <div className="mx-auto bg-green-100 dark:bg-green-900/40 p-3 rounded-full mb-4 w-fit">
-            <CheckCircle2 className="w-12 h-12 text-green-600 dark:text-green-400" />
+    <div className="min-h-screen bg-[#050505] text-neutral-200 py-20 px-6 selection:bg-neutral-800">
+      <div className="max-w-2xl mx-auto space-y-12">
+        
+        {/* Success Header */}
+        <div className="flex flex-col items-center text-center space-y-4">
+          <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center mb-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
           </div>
-          <CardTitle className="text-3xl font-bold text-green-700 dark:text-green-400">
-            Booking Confirmed!
-          </CardTitle>
-          <CardDescription className="text-lg">
-            Your tickets have been sent to your email.
-          </CardDescription>
-        </CardHeader>
+          <h1 className="text-4xl font-medium tracking-tighter text-white italic">Protocol Success.</h1>
+          <p className="text-[10px] uppercase tracking-[0.4em] text-neutral-500 font-bold">
+            Transaction Confirmed // Access Granted
+          </p>
+        </div>
 
-        <CardContent className="space-y-6 pt-6">
-          <div className="bg-background border rounded-xl p-6 shadow-sm relative overflow-hidden">
-            {/* Ticket Decorative Cut-outs */}
-            <div className="absolute -left-3 top-1/2 -mt-3 w-6 h-6 rounded-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 z-10" />
-            <div className="absolute -right-3 top-1/2 -mt-3 w-6 h-6 rounded-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 z-10" />
-            <div className="absolute left-0 right-0 top-1/2 border-t-2 border-dashed border-slate-200 dark:border-slate-800" />
-
-            <div className="relative z-0 space-y-4">
-              <div className="flex justify-between items-start pb-4">
+        {/* LIVE TICKET PREVIEW (Tailwind mirror of TicketPDF) */}
+        <div className="relative group">
+          <div className="absolute -inset-1 bg-gradient-to-b from-neutral-800 to-transparent rounded-[2rem] opacity-20 blur-2xl" />
+          
+          <Card className="relative bg-white text-black rounded-none border-none overflow-hidden shadow-2xl">
+            {/* Top Security Bar */}
+            <div className="h-2 bg-black w-full" />
+            
+            <div className="p-8 md:p-12 space-y-10">
+              <div className="flex justify-between items-start border-b-2 border-black pb-6">
                 <div>
-                  <h3 className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                    Event Details
+                  <h2 className="text-3xl font-black uppercase italic tracking-tighter leading-none">EventHub.</h2>
+                  <p className="text-[8px] font-bold tracking-[0.3em] text-neutral-400 mt-2 uppercase">Identity Passport</p>
+                </div>
+                <ShieldCheck className="w-8 h-8 opacity-20" />
+              </div>
+
+              <div className="space-y-8">
+                <div>
+                  <label className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Access Designation</label>
+                  <h3 className="text-2xl font-bold uppercase tracking-tight mt-1 truncate">
+                    {bookingData?.eventName || "Neon Dreams Concert"}
                   </h3>
-                  <p className="font-bold text-lg">Neon Dreams Concert</p>
-                  <p className="text-sm text-muted-foreground">
-                    Madison Square Garden
-                  </p>
                 </div>
 
-                <div className="text-right">
-                  <h3 className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                    Date & Time
-                  </h3>
-                  <p className="font-bold text-lg">Mar 22, 2026</p>
-                  <p className="text-sm text-muted-foreground">08:00 PM</p>
+                <div className="grid grid-cols-2 gap-8 pt-6 border-t border-neutral-100">
+                  <div>
+                    <label className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Holder</label>
+                    <p className="text-sm font-bold uppercase truncate">{session?.user?.name || "Verified Guest"}</p>
+                  </div>
+                  <div>
+                    <label className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Ledger ID</label>
+                    <p className="text-[10px] font-mono font-bold uppercase truncate">{bookingId}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8 pt-6 border-t border-neutral-100">
+                   <div>
+                      <label className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Allocation</label>
+                      <p className="text-xl font-black italic">{bookingData?.quantity || 1} Unit(s)</p>
+                   </div>
+                   <div>
+                      <label className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Valuation</label>
+                      <p className="text-xl font-black italic">{formatINR(bookingData?.totalAmount)}</p>
+                   </div>
                 </div>
               </div>
 
-              <div className="pt-4 flex justify-between items-end">
-                {/* QR Code Section */}
-                <div className="bg-white p-2 rounded shadow-sm border flex items-center justify-center min-w-[136px] min-h-[136px]">
-                  {qrUrl ? (
-                    <img
-                      src={qrUrl}
-                      alt="Booking QR Code"
-                      className="w-[120px] h-[120px] object-contain"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                      <p className="text-[10px] text-muted-foreground text-center px-2">
-                        Generating QR...
-                      </p>
-                    </div>
-                  )}
+              {/* QR and Decorative Bottom */}
+              <div className="flex justify-between items-end border-t-2 border-black pt-10 mt-10">
+                <div className="space-y-1">
+                   <p className="text-[8px] font-mono font-bold opacity-30 uppercase tracking-widest">Stamp: {new Date().getTime()}</p>
+                   <p className="text-[7px] max-w-[140px] leading-tight text-neutral-400 font-bold uppercase italic">
+                     Digital signature verified. Scan for biometric sync at entry point.
+                   </p>
                 </div>
-
-                <div className="text-right space-y-1">
-                  <p className="text-xs uppercase text-muted-foreground font-bold tracking-wider">
-                    Booking ID
-                  </p>
-                  <p className="font-mono text-xl font-bold tracking-widest text-foreground">
-                    {bookingId}
-                  </p>
-                  <p className="text-sm text-primary font-semibold mt-2">
-                    Total Paid: {formatINR(Number(totalAmount || 0))}
-                  </p>
+                <div className="bg-white p-2 border-[4px] border-black">
+                   {bookingData?.qr?.[0] ? (
+                     <img 
+                        src={`data:image/png;base64,${bookingData.qr[0]}`} 
+                        alt="Access QR" 
+                        className="w-24 h-24 image-render-pixelated"
+                     />
+                   ) : (
+                     <div className="w-24 h-24 bg-neutral-100 flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 animate-spin text-neutral-300" />
+                     </div>
+                   )}
                 </div>
               </div>
             </div>
-          </div>
+          </Card>
+        </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Button variant="outline" className="w-full gap-2">
-              <Download className="w-4 h-4" /> Download PDF
-            </Button>
-            <Button variant="outline" className="w-full gap-2">
-              <Share2 className="w-4 h-4" /> Share Ticket
-            </Button>
-          </div>
-        </CardContent>
+        {/* Actions */}
+        <div className="flex flex-col sm:flex-row gap-4">
+          {bookingData && (
+            <PDFDownloadLink
+              document={<TicketPDF booking={bookingData} user={session?.user} />}
+              fileName={`Pass-${bookingId?.slice(0, 8)}.pdf`}
+              className="flex-1"
+            >
+              {({ loading }) => (
+                <Button className="w-full h-14 bg-white text-black hover:bg-neutral-200 rounded-2xl font-black uppercase tracking-[0.2em] text-xs transition-all flex items-center justify-center gap-3">
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  Download Official Pass
+                </Button>
+              )}
+            </PDFDownloadLink>
+          )}
 
-        <CardFooter className="flex justify-center pb-8 pt-2">
           <Button 
-            className="w-full sm:w-auto px-8" 
+            variant="outline" 
+            className="flex-1 h-14 border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-900 rounded-2xl font-bold uppercase tracking-widest text-[10px]"
             onClick={() => router.push("/")}
           >
-            Back to Home
+            <Home className="w-3 h-3 mr-2" />
+            Back to Terminal
           </Button>
-        </CardFooter>
-      </Card>
+        </div>
+
+        {/* Security Footer */}
+        <div className="flex flex-col items-center gap-4 opacity-20">
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-neutral-800">
+            <ShieldCheck className="w-3 h-3 text-emerald-500" />
+            <span className="text-[8px] font-bold uppercase tracking-[0.3em] text-neutral-500">
+              Biometric Pass Linked to Identity
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

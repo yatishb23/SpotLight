@@ -31,6 +31,9 @@ function persistAuthData(loginData: any) {
     localStorage.setItem('refresh_token', loginData.user.refreshToken);
   }
 
+  if(loginData.user.user.userId || loginData.user.user.id) {
+    localStorage.setItem('userId', loginData.user.user.userId || loginData.user.user.id);
+  }
 }
 
 export function AuthModal({ open, onOpenChange }: AuthModalProps) {
@@ -73,13 +76,11 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
       });
 
       const loginData = await loginResponse.json().catch(() => null);
-
       if (!loginResponse.ok || !loginData?.success) {
         setMessage(loginData?.message || 'Invalid credentials');
         setIsError(true);
         return;
       }
-      console.log(loginData);
       
       persistAuthData(loginData);
 

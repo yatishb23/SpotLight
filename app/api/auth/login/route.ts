@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
         { status: data?.code || response.status || 401 }
       );
     }
-
+    // localStorage.setItem('userId', data.user.id);
     const res = NextResponse.json({
       success: true,
       user: data,

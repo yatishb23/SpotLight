@@ -1,106 +1,67 @@
+// components/dashboard-nav.tsx
+
 'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Plus, BarChart3, LogOut, Ticket, Users, Calendar, Settings, User } from 'lucide-react';
+import { LayoutDashboard, Plus, BarChart3, Users, Calendar, Settings } from 'lucide-react';
 import { useSession } from 'next-auth/react';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
-export function DashboardSidebar() {
+export function DashboardNav() {
   const pathname = usePathname();
-  const { data: session, status } = useSession();
-  // Safe role access with default, normalized to lowercase
-  let role = (session?.user?.role || 'user').toLowerCase();
-  if(role === 'super_admin') {
-    role = 'admin';
-  }
-  const links = [
-    // User Links
-    {
-      href: '/dashboard',
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      exact: true,
-      roles: ['organizer', 'admin'],
-    },
-    
-    {
-      href: '/dashboard/create-event',
-      label: 'Create Event',
-      icon: Plus,
-      roles: ['organizer'],
-    },
-    {
-      href: '/dashboard/analytics',
-      label: 'Analytics',
-      icon: BarChart3,
-      roles: ['organizer', 'admin'],
-    },
+  const { data: session } = useSession();
+  
+  let role = (session?.user as any)?.role?.toLowerCase() || 'user';
+  if (role === 'super_admin') role = 'admin';
 
-    {
-      href: '/dashboard/users',
-      label: 'Users',
-      icon: Users,
-      roles: ['admin'],
-    },
-    {
-      href: '/dashboard/events',
-      label: 'Events',
-      icon: Calendar,
-      roles: ['admin'],
-    },
-    {
-      href: '/dashboard/settings',
-      label: 'Settings',
-      icon: Settings,
-      roles: ['organizer', 'admin'],
-    },
+  const links = [
+    { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, exact: true, roles: ['organizer', 'admin'] },
+    { href: '/dashboard/create-event', label: 'Create Event', icon: Plus, roles: ['organizer'] },
+    { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3, roles: ['organizer', 'admin'] },
+    { href: '/dashboard/users', label: 'Users', icon: Users, roles: ['admin'] },
+    { href: '/dashboard/events', label: 'Events', icon: Calendar, roles: ['admin'] },
+    { href: '/dashboard/settings', label: 'Settings', icon: Settings, roles: ['organizer', 'admin'] },
   ];
 
-  const filteredLinks = links.filter(link => 
-    !link.roles || 
-    (role && (link.roles.includes(role) || link.roles.includes('all')))
-  );
-
-  if (status === 'loading') {
-     return (
-        <aside className="w-64 border-r bg-background h-full flex flex-col p-6">
-           <div className="h-8 w-32 bg-muted animate-pulse rounded mb-8"></div>
-           <div className="space-y-4">
-              <div className="h-4 w-full bg-muted animate-pulse rounded"></div>
-              <div className="h-4 w-3/4 bg-muted animate-pulse rounded"></div>
-              <div className="h-4 w-5/6 bg-muted animate-pulse rounded"></div>
-           </div>
-        </aside>
-     );
-  }
+  const filteredLinks = links.filter(link => !link.roles || link.roles.includes(role));
 
   return (
-    <aside className="w-64 border-r bg-background h-full overflow-y-auto flex flex-col hidden md:flex">
-      <div className="p-6">
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">EventHub</h1>
-        <p className="text-sm text-muted-foreground mt-1 capitalize">{role || 'User'} Dashboard</p>
+    /* top-[114px] should be the combined height of your SiteHeader. 
+       Adjust this value if your main navbar height changes.
+    */
+    <div className="sticky top-[114px] z-40 w-full bg-zinc-950/95 backdrop-blur-md border-b border-zinc-900">
+      <div className="max-w-[1440px] mx-auto px-4 md:px-8">
+        <ScrollArea className="w-full">
+          <div className="flex h-12 items-center gap-2">
+            <nav className="flex items-center gap-1 h-full">
+              {filteredLinks.map((link) => {
+                const isActive = link.exact ? pathname === link.href : pathname.startsWith(link.href);
+                const Icon = link.icon;
+
+                return (
+                  <Link 
+                    key={link.href} 
+                    href={link.href}
+                    className={cn(
+                      "relative flex items-center gap-2 px-4 h-12 text-[11px] font-bold uppercase tracking-widest transition-all group",
+                      isActive ? "text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+                    )}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {link.label}
+                    {isActive && (
+                      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-zinc-100 shadow-[0_0_8px_rgba(255,255,255,0.4)]" />
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+          <ScrollBar orientation="horizontal" className="invisible" />
+        </ScrollArea>
       </div>
-
-      <nav className="space-y-1 px-4 flex-1">
-        {filteredLinks.map((link) => {
-          const Icon = link.icon;
-          const isActive = link.exact ? pathname === link.href : pathname.startsWith(link.href);
-
-          return (
-            <Link key={link.href} href={link.href}>
-              <Button
-                variant={isActive ? 'default' : 'ghost'}
-                className="w-full justify-start"
-              >
-                <Icon className="w-4 h-4 mr-2" />
-                {link.label}
-              </Button>
-            </Link>
-          );
-        })}
-      </nav>
-    </aside>
+    </div>
   );
 }

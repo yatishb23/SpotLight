@@ -3,7 +3,7 @@ import axios from "axios";
 
 export async function GET(request: NextRequest) {
     try {
-        const response = await axios.get(`${process.env.BACKEND_URL}/api/events`);
+        const response = await axios.get(`${process.env.BACKEND_URL}/api/events/admin`);
         return NextResponse.json(response.data);
     } catch (error) {
         console.error('Error fetching events:', error);
