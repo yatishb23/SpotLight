@@ -1,28 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
+import Script from "next/script";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardFooter,
   CardHeader,
   CardTitle,
   CardDescription,
+  CardFooter,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
-import {
-  Loader2,
-  CreditCard,
-  Wallet,
-  Smartphone,
-  ShieldCheck,
-} from "lucide-react";
+import { Loader2, ShieldCheck, CreditCard, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { createOrder, verifyPayment } from "@/lib/api";
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 export default function BookingSummaryPage() {
   const router = useRouter();
@@ -31,262 +30,251 @@ export default function BookingSummaryPage() {
   const eventId = params.id as string;
 
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [order, setOrder] = useState<any>(null);
 
-  const seatsData = searchParams.get("seats");
-  const amountStr = searchParams.get("amount") || "0";
-  const eventTitle = searchParams.get("eventTitle") || "Selected Event";
-  const eventDate = searchParams.get("eventDate") || "";
-  const eventVenue = searchParams.get("eventVenue") || "";
-  const eventCity = searchParams.get("eventCity") || "";
-  const ticketPrice = Number(searchParams.get("ticketPrice") || "0");
-  const remainingSeats = Number(searchParams.get("remainingSeats") || "0");
+  // ✅ FIXED seat parsing
+  const {
+    selectedSeats,
+    bookingId,
+    eventTitle,
+    eventDate,
+    eventVenue,
+    eventCity,
+    baseAmount,
+  } = useMemo(() => {
+    const seatsData = searchParams.get("seats");
 
-  const selectedSeats = seatsData ? JSON.parse(seatsData) : [];
-  const baseAmount = parseFloat(amountStr);
-  const convenienceFee = baseAmount * 0.12; // 12%
+    // seats like "A1,A2,A3"
+    const parsedSeats = seatsData ? seatsData.split(",") : [];
+
+    return {
+      selectedSeats: parsedSeats,
+      bookingId: searchParams.get("bookingId") || "",
+      eventTitle: searchParams.get("eventTitle") || "Selected Event",
+      eventDate: searchParams.get("eventDate") || "",
+      eventVenue: searchParams.get("eventVenue") || "",
+      eventCity: searchParams.get("eventCity") || "",
+      baseAmount: parseFloat(searchParams.get("amount") || "0"),
+    };
+  }, [searchParams]);
+
+  const convenienceFee = baseAmount * 0.12;
   const totalAmount = baseAmount + convenienceFee;
+
   const formatINR = (amount: number) =>
     new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
-      maximumFractionDigits: 2,
-    }).format(Number(amount || 0));
+    }).format(amount);
 
-  const handlePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // ✅ Create order
+  useEffect(() => {
+    if (!bookingId || order) return;
+
+    const initOrder = async () => {
+      try {
+        setIsInitializing(true);
+
+        const response = await createOrder({
+          bookingId,
+          amount: totalAmount,
+          currency: "INR",
+        });
+
+        if (!response) throw new Error("Order creation failed");
+
+        const result = await response.json();
+        setOrder(result.data);
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to initialize payment");
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    initOrder();
+  }, [bookingId, totalAmount, order]);
+
+  // ✅ Razorpay handler
+  const handleRazorpayPayment = useCallback(async () => {
+    if (!window.Razorpay) {
+      toast.error("Razorpay SDK not loaded");
+      return;
+    }
+
+    if (!order?.orderId) {
+      toast.error("Order not ready");
+      return;
+    }
+
     setIsLoading(true);
 
-    try {
-      // API call to confirm payment -> '/api/bookings/create'
-      // Mocking 2 seconds delay
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+    const options = {
+      key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+      amount: order.amountInPaise,
+      currency: order.currency || "INR",
+      name: "Event Platform",
+      description: `Booking for ${eventTitle}`,
+      order_id: order.orderId,
 
-      const bookingId = Math.random().toString(36).substr(2, 9).toUpperCase();
+      handler: async function (response: any) {
+        try {
+          const verify = await verifyPayment({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            bookingId,
+            eventId,
+          });
 
-      // Navigate to confirmation
-      router.push(
-        `/events/${eventId}/book/confirmation?bookingId=${bookingId}&total=${totalAmount.toFixed(2)}`,
-      );
-    } catch (err) {
-      toast.error("Payment failed. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+          if (verify) {
+            toast.success("Payment Verified!");
+            router.push(
+              `/events/${eventId}/book/confirmation?bookingId=${bookingId}`
+            );
+          }
+        } catch (err) {
+          console.error(err);
+          toast.error("Verification failed");
+        } finally {
+          setIsLoading(false);
+        }
+      },
 
-  if (!seatsData) {
+      prefill: {
+        email: "user@example.com",
+        contact: "9999999999",
+      },
+
+      theme: { color: "#3b82f6" },
+
+      modal: {
+        ondismiss: () => setIsLoading(false),
+      },
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  }, [order, bookingId, eventId, eventTitle, router]);
+
+  if (!searchParams.get("seats")) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-        <p className="text-muted-foreground">No booking session found.</p>
+        <AlertCircle className="w-12 h-12 text-destructive" />
+        <p className="text-muted-foreground">
+          No active booking session found.
+        </p>
         <Button onClick={() => router.push(`/events/${eventId}`)}>
-          Go to Event
+          Return to Event
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="container max-w-4xl mx-auto py-12 px-4 md:px-6">
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Left: Summary */}
-        <div className="flex-1 space-y-6">
-          <Card className="h-fit sticky top-24">
-            <CardHeader>
-              <CardTitle>Order Summary</CardTitle>
-              <CardDescription>Review your booking details</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h3 className="font-semibold text-lg">Event Details</h3>
-                <p className="text-sm font-medium mt-1">{eventTitle}</p>
-                <p className="text-sm text-muted-foreground">
-                  Event ID: {eventId}
-                </p>
-                {eventDate && (
-                  <p className="text-sm text-muted-foreground">
-                    Date: {new Date(eventDate).toLocaleString()}
-                  </p>
-                )}
-                {(eventVenue || eventCity) && (
-                  <p className="text-sm text-muted-foreground">
-                    Venue: {eventVenue}
-                    {eventCity ? `, ${eventCity}` : ""}
-                  </p>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  Ticket Price: {formatINR(ticketPrice)}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Remaining Seats: {remainingSeats}
-                </p>
-              </div>
+    <div className="container max-w-2xl mx-auto py-12 px-4">
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        strategy="lazyOnload"
+      />
 
-              <Separator />
+      <Card className="border-2 shadow-lg">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold">
+            Confirm Your Booking
+          </CardTitle>
+          <CardDescription>
+            Review your details before payment
+          </CardDescription>
+        </CardHeader>
 
-              <div>
-                <h3 className="font-semibold mb-2">
-                  Selected Seats ({selectedSeats.length})
-                </h3>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  {selectedSeats.map((seat: any) => (
-                    <div
-                      key={seat.id}
-                      className="bg-muted/50 p-2 rounded flex justify-between"
-                    >
-                      <span>
-                        {seat.row}
-                        {seat.number}{" "}
-                        <span className="text-xs text-muted-foreground">
-                          ({seat.type})
-                        </span>
-                      </span>
-                      <span>{formatINR(Number(seat.price || 0))}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+        <CardContent className="space-y-6">
+          {/* Event Info */}
+          <div className="bg-primary/5 p-4 rounded-xl border">
+            <h3 className="font-bold text-lg">{eventTitle}</h3>
+            <p className="text-sm text-muted-foreground">
+              📅{" "}
+              {eventDate
+                ? new Date(eventDate).toLocaleDateString("en-IN")
+                : "Date TBD"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              📍 {eventVenue}
+              {eventCity ? `, ${eventCity}` : ""}
+            </p>
+          </div>
 
-              <Separator />
+          {/* Seats */}
+          <div>
+            <h3 className="font-semibold mb-3 flex justify-between">
+              <span>Seats</span>
+              <span className="text-sm text-muted-foreground">
+                {selectedSeats.length} Tickets
+              </span>
+            </h3>
 
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Subtotal</span>
-                  <span>{formatINR(baseAmount)}</span>
-                </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Convenience Fees (12%)</span>
-                  <span>{formatINR(convenienceFee)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
-                  <span>Total Payable</span>
-                  <span className="text-primary">{formatINR(totalAmount)}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right: Payment */}
-        <div className="flex-1">
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Method</CardTitle>
-              <CardDescription>
-                Complete your purchase securely.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handlePayment} className="space-y-6">
-                <RadioGroup
-                  defaultValue="card"
-                  onValueChange={setPaymentMethod}
-                  className="grid grid-cols-1 gap-4"
+            <div className="space-y-2">
+              {selectedSeats.map((seat: string, index: number) => (
+                <div
+                  key={`${seat}-${index}`} // ✅ FIXED
+                  className="flex justify-between text-sm border-b py-2"
                 >
-                  <div
-                    className={`flex items-center space-x-4 border rounded-lg p-4 cursor-pointer transition-colors ${paymentMethod === "card" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
-                  >
-                    <RadioGroupItem value="card" id="card" />
-                    <Label
-                      htmlFor="card"
-                      className="flex items-center gap-3 cursor-pointer w-full"
-                    >
-                      <CreditCard className="w-5 h-5 text-muted-foreground" />
-                      <div className="flex flex-col">
-                        <span className="font-semibold">
-                          Credit / Debit Card
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          Visa, Mastercard, Amex
-                        </span>
-                      </div>
-                    </Label>
-                  </div>
-
-                  <div
-                    className={`flex items-center space-x-4 border rounded-lg p-4 cursor-pointer transition-colors ${paymentMethod === "upi" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
-                  >
-                    <RadioGroupItem value="upi" id="upi" />
-                    <Label
-                      htmlFor="upi"
-                      className="flex items-center gap-3 cursor-pointer w-full"
-                    >
-                      <Smartphone className="w-5 h-5 text-muted-foreground" />
-                      <div className="flex flex-col">
-                        <span className="font-semibold">UPI / Application</span>
-                        <span className="text-xs text-muted-foreground">
-                          GPay, PhonePe, Paytm
-                        </span>
-                      </div>
-                    </Label>
-                  </div>
-
-                  <div
-                    className={`flex items-center space-x-4 border rounded-lg p-4 cursor-pointer transition-colors ${paymentMethod === "wallet" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
-                  >
-                    <RadioGroupItem value="wallet" id="wallet" />
-                    <Label
-                      htmlFor="wallet"
-                      className="flex items-center gap-3 cursor-pointer w-full"
-                    >
-                      <Wallet className="w-5 h-5 text-muted-foreground" />
-                      <div className="flex flex-col">
-                        <span className="font-semibold">Wallets</span>
-                        <span className="text-xs text-muted-foreground">
-                          PayPal, Apple Pay
-                        </span>
-                      </div>
-                    </Label>
-                  </div>
-                </RadioGroup>
-
-                {paymentMethod === "card" && (
-                  <div className="grid gap-4 pt-4 animate-in fade-in slide-in-from-top-4 duration-300">
-                    <div className="grid gap-2">
-                      <Label>Card Number</Label>
-                      <Input placeholder="0000 0000 0000 0000" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label>Expiry Date</Label>
-                        <Input placeholder="MM/YY" />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label>CVV</Label>
-                        <Input placeholder="123" />
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label>Card Holder Name</Label>
-                      <Input placeholder="Name on card" />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted p-2 rounded">
-                  <ShieldCheck className="w-4 h-4 text-green-600" />
-                  Actual payment processing is handled securely.
+                  <span>Seat {seat}</span>
+                  <span>
+                    {formatINR(baseAmount / selectedSeats.length)}
+                  </span>
                 </div>
+              ))}
+            </div>
+          </div>
 
-                <Button
-                  type="submit"
-                  className="w-full h-12 text-lg font-bold"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
-                      Processing...
-                    </>
-                  ) : (
-                    `Pay ${formatINR(totalAmount)}`
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+          {/* Price */}
+          <div className="space-y-3 p-4 bg-muted/20 rounded-lg">
+            <div className="flex justify-between text-sm">
+              <span>Subtotal</span>
+              <span>{formatINR(baseAmount)}</span>
+            </div>
+
+            <div className="flex justify-between text-sm">
+              <span>Convenience Fee</span>
+              <span>{formatINR(convenienceFee)}</span>
+            </div>
+
+            <Separator />
+
+            <div className="flex justify-between font-bold">
+              <span>Total</span>
+              <span>{formatINR(totalAmount)}</span>
+            </div>
+
+            <p className="text-xs flex items-center gap-1 text-green-600">
+              <ShieldCheck className="w-3 h-3" /> Secure Payment
+            </p>
+          </div>
+        </CardContent>
+
+        <CardFooter className="flex flex-col gap-3">
+          <Button
+            onClick={handleRazorpayPayment}
+            disabled={isLoading || isInitializing || !order}
+            className="w-full h-14 text-lg"
+          >
+            {isLoading || isInitializing ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <>
+                <CreditCard className="mr-2" /> Pay Now
+              </>
+            )}
+          </Button>
+
+          <Button variant="ghost" onClick={() => router.back()}>
+            Go Back
+          </Button>
+        </CardFooter>
+      </Card>
     </div>
   );
 }

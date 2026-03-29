@@ -1,35 +1,34 @@
 import { Badge } from "@/components/ui/badge";
 
-export function BookingList({ bookings }: { bookings: any[] }) {
+export const BookingList = ({ bookings, formatCurrency }: any) => {
   if (bookings.length === 0) {
-    return <div className="p-12 text-center text-neutral-500 italic">No bookings found for the selected criteria.</div>;
+    return <div className="py-12 text-center text-neutral-500 bg-neutral-900/20 rounded-xl border border-dashed border-neutral-800">No bookings found matching filters.</div>;
   }
 
   return (
-    <div className="divide-y divide-neutral-800">
-      {bookings.map((booking) => (
-        <div key={booking.id} className="p-4 hover:bg-neutral-800/30 transition-colors flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="font-medium text-neutral-200">{booking.userName}</p>
-            <p className="text-xs text-neutral-500 font-mono">{booking.id}</p>
+    <div className="space-y-3">
+      {bookings.map((booking: any) => (
+        <div key={booking.id} className="group flex flex-col md:flex-row md:items-center justify-between p-4 bg-neutral-900/40 border border-neutral-800 rounded-xl hover:border-neutral-700 transition-all">
+          <div className="flex flex-col gap-1">
+            <span className="font-semibold text-neutral-100">{booking.userName || "Unknown User"}</span>
+            <span className="text-xs text-neutral-500">{booking.userEmail}</span>
+            <span className="text-[10px] text-neutral-600 font-mono mt-1">ID: {booking.id}</span>
           </div>
-          <div className="text-right flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium px-2 py-0.5 rounded bg-neutral-800 border border-neutral-700">
-                {booking.quantity} Ticket(s)
-              </span>
-              <Badge className={
-                booking.status === "CONFIRMED" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
-                booking.status === "CANCELLED" ? "bg-red-500/10 text-red-500 border-red-500/20" : 
-                "bg-amber-500/10 text-amber-500 border-amber-500/20"
-              }>
-                {booking.status}
-              </Badge>
+          <div className="flex items-center gap-6 mt-4 md:mt-0">
+            <div className="text-right">
+              <p className="text-xs text-neutral-500">Tickets</p>
+              <p className="font-bold text-neutral-200">{booking.quantity}</p>
             </div>
-            <p className="text-sm font-semibold">₹{booking.totalAmount}</p>
+            <div className="text-right">
+              <p className="text-xs text-neutral-500">Total Paid</p>
+              <p className="font-bold text-emerald-400">{formatCurrency(booking.totalAmount)}</p>
+            </div>
+            <Badge variant="outline" className="bg-neutral-950 border-neutral-800 text-neutral-400 capitalize">
+              {booking.status?.toLowerCase().replace('_', ' ')}
+            </Badge>
           </div>
         </div>
       ))}
     </div>
   );
-}
+};

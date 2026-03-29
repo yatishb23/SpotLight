@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { Clock, Info } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Event } from "@/lib/types";
-import { apiClient } from "@/lib/api";
+import { apiClient, createBooking } from "@/lib/api";
 
 export default function BookingPage() {
   const params = useParams();
@@ -145,30 +145,39 @@ export default function BookingPage() {
     }, 0);
   };
 
-  const handleCheckout = async () => {
-    if (selectedSeats.length === 0 || !event) return;
+const handleCheckout = async () => {
+  if (selectedSeats.length === 0 || !event) return;
 
-    const selectionDetails = selectedSeats
-      .map((id) => seats.find((s) => s.id === id))
-      .filter(Boolean);
-    const totalAmount = calculateTotal();
+  const totalAmount = calculateTotal();
 
-    const query = new URLSearchParams({
-      seats: JSON.stringify(selectionDetails),
-      amount: totalAmount.toString(),
-      eventId: eventId,
-      eventTitle: event.title || "",
-      eventDate: event.startDatetime || (event as any).date || "",
-      eventVenue: event.venueName || (event as any).location || "",
-      eventCity: event.city || "",
-      ticketPrice: String(Number(event.ticketPrice || carriedTicketPrice || 0)),
-      remainingSeats: String(
-        Number(event.availableCapacity || carriedRemainingSeats || 0),
-      ),
-    }).toString();
+  // ✅ Convert seats to string format: A1,B10,A5
+  const seatsString = selectedSeats.join(",");
 
-    router.push(`/events/${eventId}/book/summary?${query}`);
-  };
+  const response = await createBooking({
+    eventName: event.title || "",
+    eventId,
+    quantity: selectedSeats.length,
+    unitPrice: totalAmount / selectedSeats.length,
+    currency: "INR",
+    seatNo:selectedSeats
+  });
+
+  const result = await response.json();
+
+  const query = new URLSearchParams({
+    seats: seatsString, // ✅ CLEAN STRING
+    amount: totalAmount.toString(),
+    eventId: eventId,
+    eventTitle: event.title || "",
+    eventDate: event.startDatetime || (event as any).date || "",
+    eventVenue: event.venueName || (event as any).location || "",
+    eventCity: event.city || "",
+    ticketPrice: String(Number(event.ticketPrice || 0)),
+    bookingId: result?.data?.id || "",
+  }).toString();
+
+  router.push(`/events/${eventId}/book/summary?${query}`);
+};
 
   if (isLoading) return <LoadingState />;
   if (!event) return <div className="p-8 text-center">Event not found</div>;

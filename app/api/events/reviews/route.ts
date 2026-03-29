@@ -77,3 +77,40 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const reviewId = request.nextUrl.searchParams.get("id");
+    const eventId = request.nextUrl.searchParams.get("eventId");
+    const accessToken = request.headers
+      .get("authorization")
+      ?.replace("Bearer ", "");
+    if (!reviewId || !eventId) {
+      return NextResponse.json(
+        { error: "Review id and Event id are required" },
+        { status: 400 },
+      );
+    }
+    const response = await fetch(
+      `${process.env.BACKEND_URL}/api/events/${eventId}/reviews/${reviewId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+    console.log(response);
+    
+    if (!response.ok) {
+      throw new Error("Failed to delete review");
+    }
+    return NextResponse.json({ message: "Review deleted successfully" });
+  } catch (err) {
+    return NextResponse.json(
+      { error: "Failed to delete review" },
+      { status: 500 },
+    );
+  }
+}

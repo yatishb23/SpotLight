@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,19 +11,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CheckCircle2, Ticket, Printer, Download, Share2 } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
-import { QRCodeDisplay } from "@/components/qr-code-display"; // Assuming it exists or I create it
-import { confetti } from "canvas-confetti"; // Need to check if this package exists, if not use simple animation
+import { CheckCircle2, Download, Share2, Loader2 } from "lucide-react";
+import { updateOrderStatus } from "@/lib/api";
 
 export default function BookingConfirmationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const params = useParams();
-  const eventId = params.id as string;
-
+  
+  // Extract query parameters
   const bookingId = searchParams.get("bookingId");
   const totalAmount = searchParams.get("total");
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  
+  // ✅ 1. The "Lock": Persists across renders without triggering them
+  const hasCalledUpdate = useRef(false);
+
   const formatINR = (amount: number) =>
     new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -31,20 +35,48 @@ export default function BookingConfirmationPage() {
       maximumFractionDigits: 2,
     }).format(Number(amount || 0));
 
-  const [isLoading, setIsLoading] = useState(true);
-
   useEffect(() => {
-    // Simulate loading details
-    const timer = setTimeout(() => setIsLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
+    const updatePaymentStatus = async () => {
+      // ✅ 2. The Guard: Stop if bookingId is missing OR if already executed
+      if (!bookingId || hasCalledUpdate.current) return;
+
+      try {
+        // ✅ 3. Close the lock immediately
+        hasCalledUpdate.current = true;
+        
+        console.log("Syncing booking status for ID:", bookingId);
+        
+        const response = await updateOrderStatus(bookingId);
+
+        const qrData = response?.data?.qr?.[0];
+        console.log(qrData);
+        
+        if (qrData) {
+          // Handle Base64
+          setQrUrl(`data:image/png;base64,${qrData}`);
+        } else if (response?.data?.qrS3Url) {
+          // Handle S3 URL
+          setQrUrl(response.data.qrS3Url);
+        }
+      } catch (error) {
+        console.error("Error updating payment status:", error);
+        // Optional: hasCalledUpdate.current = false; // Uncomment if you want to allow retry on error
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    updatePaymentStatus();
+  }, [bookingId]); // Only re-run if bookingId string actually changes
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="h-12 w-12 bg-primary/20 rounded-full" />
-          <div className="h-4 w-48 bg-muted rounded" />
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-12 w-12 text-primary animate-spin opacity-20" />
+          <p className="text-muted-foreground animate-pulse font-medium">
+            Finalizing your tickets...
+          </p>
         </div>
       </div>
     );
@@ -52,7 +84,8 @@ export default function BookingConfirmationPage() {
 
   return (
     <div className="container max-w-2xl mx-auto py-12 px-4 md:px-6">
-      <Card className="border-green-500/20 bg-green-50/10 dark:bg-green-900/10 overflow-hidden shadow-xl">
+      <Card className="border-green-500/20 bg-green-50/10 dark:bg-green-900/10 overflow-hidden shadow-xl relative">
+        {/* Top Accent Bar */}
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-emerald-600" />
 
         <CardHeader className="text-center pb-2">
@@ -69,24 +102,25 @@ export default function BookingConfirmationPage() {
 
         <CardContent className="space-y-6 pt-6">
           <div className="bg-background border rounded-xl p-6 shadow-sm relative overflow-hidden">
-            {/* Ticket Stub Design */}
-            <div className="absolute -left-3 top-1/2 -mt-3 w-6 h-6 rounded-full bg-slate-50 border border-r-0 border-slate-200 z-10" />
-            <div className="absolute -right-3 top-1/2 -mt-3 w-6 h-6 rounded-full bg-slate-50 border border-l-0 border-slate-200 z-10" />
-            <div className="absolute left-0 right-0 top-1/2 border-t-2 border-dashed border-slate-200" />
+            {/* Ticket Decorative Cut-outs */}
+            <div className="absolute -left-3 top-1/2 -mt-3 w-6 h-6 rounded-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 z-10" />
+            <div className="absolute -right-3 top-1/2 -mt-3 w-6 h-6 rounded-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 z-10" />
+            <div className="absolute left-0 right-0 top-1/2 border-t-2 border-dashed border-slate-200 dark:border-slate-800" />
+
             <div className="relative z-0 space-y-4">
               <div className="flex justify-between items-start pb-4">
                 <div>
-                  <h3 className="font-bold text-xl uppercase tracking-wider text-muted-foreground text-xs mb-1">
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-1">
                     Event Details
                   </h3>
-                  <p className="font-bold text-lg">Neon Dreams Concert</p>{" "}
-                  {/* Mock Title */}
+                  <p className="font-bold text-lg">Neon Dreams Concert</p>
                   <p className="text-sm text-muted-foreground">
                     Madison Square Garden
                   </p>
                 </div>
+
                 <div className="text-right">
-                  <h3 className="font-bold text-xl uppercase tracking-wider text-muted-foreground text-xs mb-1">
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-1">
                     Date & Time
                   </h3>
                   <p className="font-bold text-lg">Mar 22, 2026</p>
@@ -95,15 +129,29 @@ export default function BookingConfirmationPage() {
               </div>
 
               <div className="pt-4 flex justify-between items-end">
-                <div className="bg-white p-2 rounded shadow-sm border">
-                  {/* QR Code Placeholder */}
-                  <QRCodeDisplay value={`booking-${bookingId}`} size={120} />
+                {/* QR Code Section */}
+                <div className="bg-white p-2 rounded shadow-sm border flex items-center justify-center min-w-[136px] min-h-[136px]">
+                  {qrUrl ? (
+                    <img
+                      src={qrUrl}
+                      alt="Booking QR Code"
+                      className="w-[120px] h-[120px] object-contain"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      <p className="text-[10px] text-muted-foreground text-center px-2">
+                        Generating QR...
+                      </p>
+                    </div>
+                  )}
                 </div>
+
                 <div className="text-right space-y-1">
                   <p className="text-xs uppercase text-muted-foreground font-bold tracking-wider">
                     Booking ID
                   </p>
-                  <p className="font-mono text-xl font-bold tracking-widest">
+                  <p className="font-mono text-xl font-bold tracking-widest text-foreground">
                     {bookingId}
                   </p>
                   <p className="text-sm text-primary font-semibold mt-2">
@@ -123,8 +171,12 @@ export default function BookingConfirmationPage() {
             </Button>
           </div>
         </CardContent>
+
         <CardFooter className="flex justify-center pb-8 pt-2">
-          <Button className="w-full sm:w-auto" onClick={() => router.push("/")}>
+          <Button 
+            className="w-full sm:w-auto px-8" 
+            onClick={() => router.push("/")}
+          >
             Back to Home
           </Button>
         </CardFooter>

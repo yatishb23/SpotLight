@@ -400,40 +400,6 @@ export const changeEventStatus = async (eventId: string, status: string) => {
   }
 };
 
-export const deleteEvent = async (eventId: string) => {
-  try {
-    const response = await requestApi(
-      {
-        method: "DELETE",
-        url: "/api/admin/events/delete",
-        params: { id: eventId },
-      },
-      { cache: false },
-    );
-
-    invalidateApiCache(/\/api\/(events|getbyid|getbyOrganizer|admin\/events)/);
-    if (typeof window !== "undefined") {
-      try {
-        const raw = sessionStorage.getItem(EVENT_SNAPSHOT_STORAGE_KEY);
-        if (raw) {
-          const map = JSON.parse(raw) as Record<string, unknown>;
-          delete map[String(eventId)];
-          sessionStorage.setItem(
-            EVENT_SNAPSHOT_STORAGE_KEY,
-            JSON.stringify(map),
-          );
-        }
-      } catch {
-        // no-op
-      }
-    }
-    return response;
-  } catch (error) {
-    console.error("Error deleting event:", error);
-    throw error;
-  }
-};
-
 export const apiClient = {
   async getEvents(page = 1, pageSize = 20, options?: RequestOptions) {
     const payload = await requestApi<any>(
@@ -734,56 +700,92 @@ export const uploadEventImage = async (
 
 export const updateEvent = async (formData: FormData) => {
   try {
+    // ✅ Validate FormData
     if (!(formData instanceof FormData) || [...formData.keys()].length === 0) {
       throw new Error("Event form data is empty");
     }
 
     const headers = getAuthHeaders();
+
+    // ✅ Extract and validate payload
     const dataField = formData.get("data");
     if (typeof dataField !== "string") {
       throw new Error("Invalid event payload");
     }
 
     const payload = JSON.parse(dataField) as EventDraftPayload;
-    const normalizedTicketType: "FREE" | "PAID" =
-      payload.ticketType === "PAID" ? "PAID" : "FREE";
+    const eventId = String(payload.eventId || "").trim();
 
-    const basePayload: EventDraftPayload = {
-      ...payload,
-      ticketType: normalizedTicketType,
-    };
-
-    const imageEntry = formData.get("file");
-    let createPayload: EventMutationPayload;
-
-    if (imageEntry instanceof File) {
-      createPayload = await buildEventMutationPayload(
-        imageEntry,
-        basePayload,
-        headers,
-        basePayload.eventId,
-      );
-    } else {
-      const resolvedEventId = String(basePayload.eventId || "").trim();
-      const existingBannerUrl = String(basePayload.s3URLString || "").trim();
-
-      if (!resolvedEventId) {
-        throw new Error("Missing event ID");
-      }
-
-      if (!existingBannerUrl) {
-        throw new Error("Missing banner URL");
-      }
-
-      createPayload = {
-        ...basePayload,
-        eventId: resolvedEventId,
-        s3URLString: existingBannerUrl,
-      };
+    if (!eventId) {
+      throw new Error("Event ID is missing");
     }
 
-    const response = await updateEventDetails(createPayload);
-    return handleEventMutationResponse(response, "update");
+    let bannerS3Url = payload.s3URLString;
+
+    // ✅ Handle file upload
+    const imageEntry = formData.get("file");
+
+    if (formData.has("file") && imageEntry instanceof File) {
+      const file = imageEntry;
+
+      // Step 1: Get pre-signed URL
+      const uploadResponse = await fetch(
+        `/api/events/upload?eventId=${eventId}`,
+        {
+          method: "POST",
+          headers: {
+            ...headers,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: file.type,
+            isBanner: true,
+          }),
+        },
+      );
+
+      // ✅ Read response ONLY ONCE
+      const uploadJson = await uploadResponse.json();
+
+      if (!uploadResponse.ok) {
+        throw new Error(uploadJson.error || "Failed to get upload URL");
+      }
+
+      // Step 2: Upload to S3
+      await uploadToS3(file, uploadJson.data.uploadUrl);
+
+      // Step 3: Save file URL
+      bannerS3Url = uploadJson.data.fileUrl;
+    }
+
+    // ✅ Prepare payload
+    const newPayload = {
+      description: payload.description,
+      venueName: payload.venueName,
+      address: payload.address,
+      city: payload.city,
+      bannerS3Url,
+    };
+
+    // ✅ Update event
+    const response = await fetch(`/api/events/update?id=${eventId}`, {
+      method: "PUT",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(newPayload),
+    });
+
+    // ✅ Read response ONLY ONCE
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to update event");
+    }
+
+    return result;
   } catch (error) {
     console.error("Error updating event:", error);
     throw error;
@@ -846,4 +848,120 @@ export const createReview = async (
     console.error("Error creating review:", error);
     throw error;
   }
+};
+
+export const deleteEvent = async (eventId: string) => {
+  const response = await fetch(`/api/events?id=${eventId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${getAccessToken()}`,
+    },
+  });
+  return response.json();
+};
+
+export const deleteReview = async (eventId: string, reviewId: string) => {
+  const response = await fetch(
+    `/api/events/reviews?id=${reviewId}&eventId=${eventId}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${getAccessToken()}`,
+      },
+    },
+  );
+  return response.json();
+};
+
+export const createBooking = async (data: Record<string, unknown>) => {
+  try {
+    const accessToken = getAccessToken();
+
+    const response = await fetch("/api/bookings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    invalidateApiCache(/\/api\/(bookings|events)/);
+
+    if (!response.ok) {
+      throw new Error("Booking failed");
+    }
+
+    return response;
+  } catch (error) {
+    console.error("Error creating booking:", error);
+    throw error;
+  }
+};
+
+export async function createOrder(data: Record<string, unknown>) {
+  try {
+    const accessToken = getAccessToken();
+
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    return response;
+  } catch (error) {
+    console.error("Error creating order:", error);
+  }
+}
+
+export const verifyPayment = async (data: any) => {
+  try {
+    
+    const response = await fetch(
+      `/api/orders/verify`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getAccessToken()}`,
+        },
+        body: JSON.stringify(data),
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || "Verification failed");
+    }
+
+    return result;
+  } catch (error: any) {
+    throw new Error(error.message || "Something went wrong");
+  }
+};
+
+export const updateOrderStatus = async (bookingId: string) => {
+    try {
+        const response = await fetch("/api/orders/update-status", {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${getAccessToken()}`, // Implement getAccessToken to retrieve the token from cookies/localStorage
+            },
+            body: JSON.stringify({ bookingId }),
+        });
+        if (!response.ok) {
+            throw new Error("Failed to update order status");
+        }
+        const result = await response.json();
+        console.log("Order status updated successfully:");
+        return result?.data;
+    } catch (error) {
+        console.error("Error updating order status:", error);
+    }
 };

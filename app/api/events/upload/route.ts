@@ -33,12 +33,14 @@ export async function POST(request: NextRequest) {
         },
       },
     );
-
+    
     if (!response.ok) {
       throw new Error("Failed to upload event");
     }
 
     const eventsData = await response.json();
+    console.log(eventsData);
+    
     return NextResponse.json({ data: eventsData?.data ?? eventsData });
   } catch (err) {
     console.error("Error:", err);
@@ -48,3 +50,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+
