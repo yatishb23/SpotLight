@@ -13,7 +13,7 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, ShieldCheck, CreditCard, AlertCircle, ArrowLeft, ReceiptText } from "lucide-react";
+import { Loader2, ShieldCheck, CreditCard, AlertCircle, ArrowLeft, ReceiptText, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { createOrder, verifyPayment } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,7 @@ export default function BookingSummaryPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [order, setOrder] = useState<any>(null);
+  const [timer, setTimer] = useState(600);
 
   const {
     selectedSeats,
@@ -91,6 +92,32 @@ export default function BookingSummaryPage() {
 
     initOrder();
   }, [bookingId, totalAmount, order]);
+
+  // 10 minute session timer — persisted via sessionStorage
+  useEffect(() => {
+    const STORAGE_KEY = `booking_session_${bookingId}`;
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+
+    if (stored) {
+      const expiresAt = parseInt(stored, 10);
+      const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+      setTimer(remaining);
+    } else {
+      // Set expiry 10 minutes from now
+      sessionStorage.setItem(STORAGE_KEY, String(Date.now() + 600_000));
+    }
+  }, [bookingId]);
+
+  useEffect(() => {
+    if (timer <= 0) {
+      sessionStorage.removeItem(`booking_session_${bookingId}`);
+      router.push(`/events/${eventId}/book/session-expired?reason=timeout&from=payment`);
+      return;
+    }
+
+    const interval = setInterval(() => setTimer((t) => t - 1), 1000);
+    return () => clearInterval(interval);
+  }, [timer, bookingId, eventId, router]);
 
   const handleRazorpayPayment = useCallback(async () => {
     if (!window.Razorpay || !order?.orderId) {
@@ -160,6 +187,13 @@ export default function BookingSummaryPage() {
           </div>
           <h1 className="text-4xl font-medium tracking-tighter text-white italic">Settlement Summary.</h1>
           <p className="text-[10px] uppercase tracking-[0.4em] text-neutral-500 font-bold">Review Transaction Metadata</p>
+          <div className="mt-4 inline-flex items-center gap-2 bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-2 rounded-full">
+            <Clock className="w-3.5 h-3.5" />
+            <span className="text-xs font-mono font-bold">
+              {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")}
+            </span>
+            <span className="text-[9px] uppercase tracking-widest font-bold opacity-60">remaining</span>
+          </div>
         </div>
 
         <Card className="bg-neutral-900/40 border-neutral-800 backdrop-blur-xl rounded-[32px] overflow-hidden shadow-2xl">

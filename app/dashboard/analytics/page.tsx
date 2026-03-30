@@ -28,8 +28,10 @@ import {
   RefreshCcw, 
   BarChart3, 
   Zap,
-  Info
+  Info,
+  ArrowLeft
 } from "lucide-react";
+import Link from "next/link";
 
 const LIVE_REFRESH_INTERVAL_MS = 30000;
 const AGGREGATED_EVENT_ID = "ALL_EVENTS";
@@ -187,10 +189,13 @@ export default function AnalyticsPage() {
         {/* Modern Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-neutral-900 pb-8">
           <div>
-            <div className="flex items-center gap-2 text-neutral-500 mb-2">
-              <BarChart3 className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-[0.2em] font-bold">Analytics Engine v2.0</span>
-            </div>
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-neutral-500 hover:text-white transition-colors group"
+            >
+              <ArrowLeft className="w-3 h-3 group-hover:-translate-x-1 transition-transform" />
+              Back to Dashboard
+            </Link>
             <h1 className="text-4xl font-semibold tracking-tight text-white mb-2">Intelligence</h1>
             <p className="text-neutral-500 text-sm max-w-md font-light leading-relaxed">
               Real-time synchronization with global booking streams. Monitoring sales velocity and revenue distribution.

@@ -2,7 +2,7 @@ import { NextRequest,NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
-  const eventId = searchParams.get("id");
+  const eventId = searchParams.get("eventId");
 
   const accessToken = request.headers
     .get("authorization")
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   }
   try{
     const response = await fetch(
-      `${process.env.BACKEND_URL}/api/bookings/event/${eventId}`,
+      `${process.env.BACKEND_URL}/api/bookings/${eventId}`,
       {
         method: "GET",
         headers: {
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       },
     );
     const data = await response.json();
-
+    
     
     return NextResponse.json(data);
   } catch (error) {

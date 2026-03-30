@@ -210,8 +210,10 @@ export default function ManageUsersPage() {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-neutral-800" />
                   <DropdownMenuItem className="text-red-400 focus:bg-red-950 focus:text-red-300" onClick={() => handleDeleteUser(user.id)}>
-                    Purge Identity
+                    Delete User
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-neutral-800" />
+                
                 </DropdownMenuContent>
               </DropdownMenu>
             </TableCell>

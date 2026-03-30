@@ -23,6 +23,7 @@ export function DashboardNav() {
     { href: '/dashboard/users', label: 'Users', icon: Users, roles: ['admin'] },
     { href: '/dashboard/events', label: 'Events', icon: Calendar, roles: ['admin'] },
     { href: '/dashboard/settings', label: 'Settings', icon: Settings, roles: ['organizer', 'admin'] },
+    { href: '/dashboard/requests', label: 'Requests', icon: Settings, roles: ['admin'] },
   ];
 
   const filteredLinks = links.filter(link => !link.roles || link.roles.includes(role));

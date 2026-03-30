@@ -1,83 +1,103 @@
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tag, Calendar, User, ShoppingBag } from "lucide-react";
+import { Tag, Calendar, Banknote, ShieldCheck } from "lucide-react";
 
 export default function OffersPage() {
   const offers = [
     {
       id: 1,
-      bank: "HDFC Bank",
-      title: "Buy 1 Get 1 Free",
-      description: "Get 1 free movie ticket on booking of 1 ticket with HDFC Credit Cards.",
-      code: "HDFC100",
-      validTill: "31st Dec 2024",
-      type: "Card Offer"
+      bank: "HDFC Node",
+      title: "100% Rebate Allocation",
+      description: "Receive exact equivalent token generation on successful initialization via HDFC secure gateways.",
+      code: "HDFC-100",
+      validTill: "Cycle 4, 2024",
+      type: "Payment Gateway"
     },
     {
       id: 2,
-      bank: "ICICI Bank",
-      title: "25% Cashback",
-      description: "Get 25% cashback up to ₹100 on movie tickets with ICICI Bank Net Banking.",
-      code: "ICICI25",
-      validTill: "30th Nov 2024",
-      type: "Bank Offer"
+      bank: "ICICI Protocol",
+      title: "25% Cashback Sync",
+      description: "Initialize a 25% cryptographic rebate up to 100 credits via ICICI localized routing.",
+      code: "ICICI-025",
+      validTill: "Cycle 3, 2024",
+      type: "Node Offer"
     },
     {
       id: 3,
-      bank: "Amazon Pay",
-      title: "Win ₹500 Cashback",
-      description: "Pay using Amazon Pay and win straight ₹500 cashback on bookings above ₹1000.",
-      code: "AMAZON500",
-      validTill: "15th Oct 2024",
-      type: "Wallet Offer"
+      bank: "Amazon Core",
+      title: "500 Credit Bonus",
+      description: "Bypass standard routing via Amazon Core and receive a flat 500 credit allocation on 1000+ settlements.",
+      code: "AMZ-500",
+      validTill: "Cycle 2, 2024",
+      type: "Wallet Array"
     },
      {
       id: 4,
-      bank: "EventHub",
-      title: "Student Discount",
-      description: "Flat 50% off for students on weekdays before 5 PM shows.",
-      code: "STUDENT50",
-      validTill: "valid always",
-      type: "Special Offer"
+      bank: "Registry Internal",
+      title: "Academic Override",
+      description: "Flat 50% discount parameter applied for verified academic identities during pre-meridian cycles.",
+      code: "ACAD-050",
+      validTill: "Persistent",
+      type: "Internal Grant"
     }
   ];
 
   return (
-    <div className="container py-10 mx-auto">
-      <div className="flex flex-col items-center text-center space-y-4 mb-10">
-         <h1 className="text-4xl font-bold tracking-tight">Offers & Promotions</h1>
-         <p className="text-xl text-muted-foreground max-w-2xl">
-           Save on your favorite events with our exclusive bank and wallet offers.
-         </p>
-      </div>
+    <div className="min-h-screen bg-[#050505] text-neutral-200 selection:bg-neutral-800 py-16 px-6 lg:px-12">
+      <div className="max-w-6xl mx-auto space-y-16 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+        
+        {/* Header Ledger */}
+        <header className="flex flex-col items-center text-center border-b border-neutral-900 pb-16 space-y-4">
+          <div className="inline-flex w-fit items-center gap-2 px-2 py-1 rounded bg-neutral-900 border border-neutral-800 mb-2">
+            <Banknote className="w-3.5 h-3.5 text-neutral-500" />
+            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-500 font-mono">
+              FINANCIAL_INCENTIVES
+            </span>
+          </div>
+          <h1 className="text-5xl md:text-6xl font-medium tracking-tighter text-white uppercase italic">
+            Economic Overrides.
+          </h1>
+          <p className="text-sm text-neutral-500 font-light italic max-w-2xl">
+            Active modifiers and rebate structures available for synchronized gateway settlements and verified network identities.
+          </p>
+        </header>
 
-       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {offers.map((offer) => (
-          <Card key={offer.id} className="relative overflow-hidden group hover:shadow-lg transition-shadow">
-            <div className="absolute top-0 right-0 p-4">
-               <Badge variant={offer.type === 'Bank Offer' ? 'default' : 'secondary'}>{offer.type}</Badge>
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {offers.map((offer) => (
+            <div key={offer.id} className="relative bg-[#0a0a0a] border border-neutral-900 rounded-[32px] overflow-hidden group hover:border-neutral-700 transition-colors flex flex-col">
+              
+              <div className="absolute top-6 right-6 z-10">
+                 <div className="px-3 py-1 bg-neutral-900 border border-neutral-800 rounded-lg text-[9px] font-black tracking-widest uppercase text-neutral-500">
+                   {offer.type}
+                 </div>
+              </div>
+
+              <div className="p-8 pb-6 flex-grow">
+                <div className="flex items-center gap-3 mb-4">
+                   <div className="h-8 w-8 bg-neutral-900 rounded flex items-center justify-center">
+                     <ShieldCheck className="h-4 w-4 text-neutral-500 group-hover:text-white transition-colors" />
+                   </div>
+                   <span className="text-[10px] font-black uppercase tracking-widest text-neutral-600">{offer.bank}</span>
+                </div>
+                <h3 className="text-2xl font-medium tracking-tight text-white mb-4 line-clamp-1">{offer.title}</h3>
+                <p className="text-xs text-neutral-500 font-mono leading-relaxed mb-6 line-clamp-3">
+                  {offer.description}
+                </p>
+                
+                <div className="flex items-center gap-2 text-[10px] font-mono text-neutral-600 uppercase tracking-widest">
+                   <Calendar className="h-3.5 w-3.5 text-neutral-500" />
+                   Valid Till: {offer.validTill}
+                </div>
+              </div>
+
+              <div className="p-6 bg-[#050505] border-t border-neutral-900 flex justify-between items-center group-hover:bg-neutral-900/30 transition-colors">
+                <div className="font-mono font-bold text-sm tracking-widest text-neutral-400 select-all">
+                  {offer.code}
+                </div>
+                <Button className="h-8 rounded-lg bg-white text-black hover:bg-neutral-200 text-[9px] font-black tracking-widest uppercase px-4 shadow-[0_0_15px_rgba(255,255,255,0.1)]">Inject Token</Button>
+              </div>
             </div>
-            <CardHeader>
-              <div className="flex items-center gap-2 mb-2">
-                 <Tag className="h-5 w-5 text-primary" />
-                 <span className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">{offer.bank}</span>
-              </div>
-              <CardTitle className="text-xl">{offer.title}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground mb-4">{offer.description}</p>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                 <Calendar className="h-4 w-4" />
-                 Valid till {offer.validTill}
-              </div>
-            </CardContent>
-            <CardFooter className="bg-muted/50 p-4 border-t flex justify-between items-center group-hover:bg-muted transition-colors">
-              <div className="font-mono font-bold text-lg text-primary">{offer.code}</div>
-              <Button size="sm" variant="outline">Copy Code</Button>
-            </CardFooter>
-          </Card>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );

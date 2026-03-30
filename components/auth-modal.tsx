@@ -34,6 +34,9 @@ function persistAuthData(loginData: any) {
   if(loginData.user.user.userId || loginData.user.user.id) {
     localStorage.setItem('userId', loginData.user.user.userId || loginData.user.user.id);
   }
+  if(loginData.user.user.fullName || loginData.user.user.fullName) {
+    localStorage.setItem('userName', loginData.user.user.fullName || loginData.user.user.fullName);
+  }
 }
 
 export function AuthModal({ open, onOpenChange }: AuthModalProps) {

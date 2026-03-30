@@ -36,7 +36,7 @@ export function EventCard({ event, variant = 'default', className }: EventCardPr
       >
         {/* Image Container */}
         <div className={cn(
-          "relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-lg transition-colors group-hover:border-zinc-700",
+          "relative overflow-hidden rounded-[24px] border border-neutral-900 bg-[#0a0a0a] shadow-2xl transition-all duration-500 group-hover:border-neutral-700",
           variant === 'portrait' ? "aspect-[2/3]" : "aspect-[16/10]"
         )}>
           <Image
@@ -44,42 +44,43 @@ export function EventCard({ event, variant = 'default', className }: EventCardPr
             alt={event.title || 'Event poster'}
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            className="object-cover transition-transform duration-700 ease-out group-hover:scale-110 group-hover:rotate-1"
+            className="object-cover grayscale transition-all duration-700 ease-out group-hover:scale-110 group-hover:rotate-1 group-hover:grayscale-0"
           />
           
           {/* High-end Overlays */}
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent opacity-80" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/40 to-transparent opacity-90" />
           
           {/* Floating Badge */}
-          <div className="absolute top-3 left-3">
-            <Badge className="bg-zinc-950/60 text-zinc-100 backdrop-blur-md border border-white/10 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5">
+          <div className="absolute top-4 left-4">
+            <Badge className="bg-black/40 text-neutral-300 backdrop-blur-md border border-neutral-800/50 text-[8px] font-black uppercase tracking-widest px-3 py-1">
               {event.category}
             </Badge>
           </div>
 
           {/* Rating/Price Tag (Optional Premium Add) */}
-          <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-zinc-100 text-zinc-950 px-2 py-0.5 rounded-md font-black text-[10px] uppercase shadow-xl">
-             <Star className="w-2.5 h-2.5 fill-current" /> 4.8
+          <div className="absolute bottom-4 right-4 flex items-center gap-1.5 bg-neutral-900/80 backdrop-blur-md text-white px-2.5 py-1 border border-neutral-800 rounded-md font-mono text-[9px] uppercase shadow-2xl">
+             <Star className="w-2.5 h-2.5 fill-current text-white" /> 4.8
           </div>
         </div>
 
         {/* Content Section */}
-        <div className="px-1 space-y-1.5">
-          <h3 className="font-bold text-sm md:text-base leading-tight text-zinc-100 line-clamp-1 group-hover:text-white transition-colors uppercase tracking-tight italic">
+        <div className="px-2 pt-1 space-y-2">
+          <p className="text-[8px] text-neutral-600 font-bold uppercase tracking-[0.2em] mb-1">RECORD: ID-{event.id.slice(0,6).toUpperCase()}</p>
+          <h3 className="font-medium text-sm md:text-base leading-tight text-white line-clamp-1 group-hover:text-neutral-300 transition-colors uppercase tracking-tight italic">
             {event.title}
           </h3>
           
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-zinc-500">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2 text-neutral-500">
               <Calendar className="w-3 h-3" />
-              <span className="text-[11px] font-medium uppercase tracking-tighter">
+              <span className="text-[10px] font-mono uppercase tracking-tighter">
                 {formatDate(event.startDatetime || (event as any).date || new Date())}
               </span>
             </div>
             
-            <div className="flex items-center gap-2 text-zinc-500">
+            <div className="flex items-center gap-2 text-neutral-500">
               <MapPin className="h-3 w-3" />
-              <span className="text-[11px] font-medium uppercase tracking-tighter truncate max-w-[180px]">
+              <span className="text-[10px] font-mono uppercase tracking-tighter truncate max-w-[180px]">
                 {event.venueName || (event as any).location} • {event.city}
               </span>
             </div>
@@ -87,7 +88,7 @@ export function EventCard({ event, variant = 'default', className }: EventCardPr
 
           {/* Price Indicator */}
           {event.description && variant === 'default' && (
-             <p className="text-[11px] text-zinc-600 line-clamp-2 mt-1 italic leading-relaxed">
+             <p className="text-[10px] text-neutral-600 line-clamp-2 mt-2 font-mono leading-relaxed">
                {event.description}
              </p>
           )}

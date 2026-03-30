@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify(body),
       }
     );
-
     const parseJSON = async (res: Response) => {
       const text = await res.text();
       return text ? JSON.parse(text) : null;

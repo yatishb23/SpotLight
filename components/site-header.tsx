@@ -12,14 +12,15 @@ import {
   Settings,
   CreditCard,
   PlusCircle,
-  Film, 
-  Music, 
-  Activity, 
-  Theater, 
-  Gamepad2, 
-  Laugh, 
-  LayoutGrid, 
-  Menu
+  Film,
+  Music,
+  Activity,
+  Theater,
+  Gamepad2,
+  Laugh,
+  LayoutGrid,
+  Menu,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,14 +37,14 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 const categories = [
-  { name: 'All', icon: LayoutGrid },
-  { name: 'Movies', icon: Film },
-  { name: 'Music', icon: Music },
-  { name: 'Sports', icon: Activity },
-  { name: 'Arts', icon: Theater },
-  { name: 'Comedy', icon: Laugh },
-  { name: 'Activities', icon: MapPin },
-  { name: 'Technology', icon: Gamepad2 },
+  { name: "All", icon: LayoutGrid },
+  { name: "Movies", icon: Film },
+  { name: "Music", icon: Music },
+  { name: "Sports", icon: Activity },
+  { name: "Arts", icon: Theater },
+  { name: "Comedy", icon: Laugh },
+  { name: "Activities", icon: MapPin },
+  { name: "Technology", icon: Gamepad2 },
 ];
 
 interface SiteHeaderProps {
@@ -53,13 +54,21 @@ interface SiteHeaderProps {
   onSelectCategory: (category: string) => void;
 }
 
-export function SiteHeader({ 
-  selectedCity, onSelectCity, selectedCategory, onSelectCategory 
+export function SiteHeader({
+  selectedCity,
+  onSelectCity,
+  selectedCategory,
+  onSelectCategory,
 }: SiteHeaderProps) {
   const { data: session } = useSession();
   const user = session?.user as any; // Cast to any to access custom 'role' property
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+
+  const listEventHref =
+    user?.role === "organizer" || user?.role === "admin"
+      ? "/dashboard/create-event"
+      : "/request-organizer";
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -67,7 +76,7 @@ export function SiteHeader({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-    const handleLogout = async () => {
+  const handleLogout = async () => {
     const refreshToken = localStorage.getItem("refresh_token") || undefined;
 
     try {
@@ -93,15 +102,16 @@ export function SiteHeader({
   };
 
   return (
-    <header className={cn(
-      "sticky top-0 z-50 w-full transition-all duration-500 border-b pt-2 md:pt-3",
-      isScrolled 
-        ? "bg-zinc-950/90 backdrop-blur-xl border-zinc-800/50 shadow-xl" 
-        : "bg-zinc-950 border-transparent"
-    )}>
+    <header
+      className={cn(
+        "sticky top-0 z-50 w-full transition-all duration-500 border-b pt-2 md:pt-3",
+        isScrolled
+          ? "bg-zinc-950/90 backdrop-blur-xl border-zinc-800/50 shadow-xl"
+          : "bg-zinc-950 border-transparent",
+      )}
+    >
       <div className="max-w-[1440px] mx-auto px-4 md:px-8">
         <div className="flex h-16 items-center justify-between gap-8">
-          
           {/* Logo & City */}
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2 group">
@@ -112,13 +122,15 @@ export function SiteHeader({
                 EventHub
               </span>
             </Link>
-            
+
             <button
               onClick={onSelectCity}
               className="flex items-center gap-1.5 text-[13px] font-medium text-zinc-400 hover:text-zinc-100 transition-colors py-1 px-2 rounded-md hover:bg-zinc-800/50"
             >
               <MapPin className="h-3.5 w-3.5 opacity-50" />
-              <span className="max-w-[100px] truncate">{selectedCity || "Select City"}</span>
+              <span className="max-w-[100px] truncate">
+                {selectedCity || "Select City"}
+              </span>
               <ChevronDown className="h-3 w-3 opacity-40" />
             </button>
           </div>
@@ -134,6 +146,14 @@ export function SiteHeader({
 
           {/* User Section */}
           <div className="flex items-center gap-4">
+            <Link href={listEventHref} className="hidden sm:block">
+              <Button
+                variant="ghost"
+                className="text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50 text-[12px] font-bold tracking-tight h-10 px-4 transition-all"
+              >
+                List Your Event
+              </Button>
+            </Link>
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -154,35 +174,53 @@ export function SiteHeader({
                     </div>
                   </button>
                 </DropdownMenuTrigger>
-                
-                <DropdownMenuContent align="end" className="w-60 bg-zinc-950 border-zinc-800 text-zinc-400 p-1.5 shadow-2xl mt-2">
+
+                <DropdownMenuContent
+                  align="end"
+                  className="w-60 bg-zinc-950 border-zinc-800 text-zinc-400 p-1.5 shadow-2xl mt-2"
+                >
                   <DropdownMenuLabel className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-3 py-2">
                     My Account
                   </DropdownMenuLabel>
-                  
+
                   <DropdownMenuSeparator className="bg-zinc-900" />
 
                   {/* Option: Profile (All Roles) */}
-                  <DropdownMenuItem asChild className="focus:bg-zinc-900 focus:text-zinc-100 py-2.5 rounded-md cursor-pointer">
+                  <DropdownMenuItem
+                    asChild
+                    className="focus:bg-zinc-900 focus:text-zinc-100 py-2.5 rounded-md cursor-pointer"
+                  >
                     <Link href="/profile" className="flex items-center w-full">
-                      <Settings className="h-4 w-4 mr-3 opacity-70" /> Account Settings
+                      <Settings className="h-4 w-4 mr-3 opacity-70" /> Account
+                      Settings
                     </Link>
                   </DropdownMenuItem>
 
-                  {/* Option: Bookings (Users Only) */}
-                  {user.role === "user" && (
-                    <DropdownMenuItem asChild className="focus:bg-zinc-900 focus:text-zinc-100 py-2.5 rounded-md cursor-pointer">
-                      <Link href="/my-bookings" className="flex items-center w-full">
-                        <CreditCard className="h-4 w-4 mr-3 opacity-70" /> My Bookings
-                      </Link>
-                    </DropdownMenuItem>
-                  )}
+                  <DropdownMenuItem
+                    asChild
+                    className="focus:bg-zinc-900 focus:text-zinc-100 py-2.5 rounded-md cursor-pointer"
+                  >
+                    <Link
+                      href="/my-bookings"
+                      className="flex items-center w-full"
+                    >
+                      <CreditCard className="h-4 w-4 mr-3 opacity-70" /> My
+                      Bookings
+                    </Link>
+                  </DropdownMenuItem>
 
                   {/* Option: Dashboard (Admin or Organizer) */}
                   {(user.role === "admin" || user.role === "organizer") && (
-                    <DropdownMenuItem asChild className="focus:bg-zinc-900 focus:text-zinc-100 py-2.5 rounded-md cursor-pointer">
-                      <Link href="/dashboard" className="flex items-center w-full">
-                        <PlusCircle className="h-4 w-4 mr-3 opacity-70" /> My Dashboard
+                    <DropdownMenuItem
+                      asChild
+                      className="focus:bg-zinc-900 focus:text-zinc-100 py-2.5 rounded-md cursor-pointer"
+                    >
+                      <Link
+                        href="/dashboard"
+                        className="flex items-center w-full"
+                      >
+                        <PlusCircle className="h-4 w-4 mr-3 opacity-70" /> My
+                        Dashboard
                       </Link>
                     </DropdownMenuItem>
                   )}
@@ -190,18 +228,31 @@ export function SiteHeader({
                   <DropdownMenuSeparator className="bg-zinc-900" />
 
                   {/* Logout */}
-                  <DropdownMenuItem 
-                    onClick={() => handleLogout()} 
+                  <DropdownMenuItem
+                    onClick={() => handleLogout()}
                     className="text-red-400 focus:bg-red-500/10 focus:text-red-400 py-2.5 rounded-md cursor-pointer font-medium"
                   >
                     <LogOut className="h-4 w-4 mr-3" /> Log out
                   </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    asChild
+                    className="focus:bg-zinc-900 focus:text-zinc-100 py-2.5 rounded-md cursor-pointer"
+                  >
+                    <Link
+                      href={listEventHref}
+                      className="flex items-center w-full"
+                    >
+                      <Plus className="h-4 w-4 mr-3 opacity-70 text-emerald-500" />{" "}
+                      List Your Event
+                    </Link>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Button 
-                size="sm" 
-                onClick={() => setIsAuthModalOpen(true)} 
+              <Button
+                size="sm"
+                onClick={() => setIsAuthModalOpen(true)}
                 className="bg-zinc-100 text-zinc-950 hover:bg-zinc-200 text-[12px] font-black h-10 px-6 rounded-full transition-transform active:scale-95"
               >
                 SIGN IN
@@ -215,21 +266,31 @@ export function SiteHeader({
           <ScrollArea className="w-full whitespace-nowrap">
             <div className="flex w-max space-x-8 pb-1">
               {categories.map((cat) => {
-                const isSelected = selectedCategory === cat.name || (selectedCategory === '' && cat.name === 'All');
+                const isSelected =
+                  selectedCategory === cat.name ||
+                  (selectedCategory === "" && cat.name === "All");
                 return (
                   <button
                     key={cat.name}
-                    onClick={() => onSelectCategory(cat.name === 'All' ? '' : cat.name)}
+                    onClick={() =>
+                      onSelectCategory(cat.name === "All" ? "" : cat.name)
+                    }
                     className={cn(
                       "relative flex flex-col items-center gap-1.5 transition-all group pb-1",
-                      isSelected ? "text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+                      isSelected
+                        ? "text-zinc-100"
+                        : "text-zinc-500 hover:text-zinc-300",
                     )}
                   >
-                    <cat.icon className={cn(
-                      "h-4 w-4 transition-transform group-hover:scale-110",
-                      isSelected ? "text-zinc-100" : "text-zinc-500"
-                    )} />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.1em]">{cat.name}</span>
+                    <cat.icon
+                      className={cn(
+                        "h-4 w-4 transition-transform group-hover:scale-110",
+                        isSelected ? "text-zinc-100" : "text-zinc-500",
+                      )}
+                    />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.1em]">
+                      {cat.name}
+                    </span>
                     {isSelected && (
                       <div className="absolute -bottom-[2px] left-0 right-0 h-[2px] bg-zinc-100 rounded-full" />
                     )}

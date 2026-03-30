@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-
+    
     const response = await fetch(
       `${process.env.BACKEND_URL}/api/events/${body.eventId}/reviews`,
       {
@@ -64,11 +64,17 @@ export async function POST(request: NextRequest) {
         }),
       },
     );
-
+    
     if (!response.ok) {
-      throw new Error("Failed to fetch event reviews");
+      return NextResponse.json(
+        { message: "You cannot submit a review for this event before it has occurred" },
+        {status: 400}
+      );
     }
     const reviewsData = await response.json();
+    console.log(reviewsData);
+    
+    
     return NextResponse.json(reviewsData?.data ?? reviewsData);
   } catch (err) {
     return NextResponse.json(
@@ -114,3 +120,4 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+

@@ -7,14 +7,10 @@ import { z } from "zod";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Form } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -28,22 +24,22 @@ import { useRouter } from "next/navigation";
 import { EVENT_CATEGORIES } from "@/lib/constants";
 import { Spinner } from "@/components/ui/spinner";
 import Link from "next/link";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft, Upload, ShieldCheck, Zap, Globe, Clock, Banknote, Users, Info } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { createEvent } from "@/lib/api";
+import { Separator } from "@/components/ui/separator";
 
 const uuidSchema = z.string().uuid();
 
 const eventSchema = z.object({
-  title: z.string().min(3, "Title must be at least 3 characters"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
-  date: z.string().min(1, "Date is required"),
-  time: z.string().min(1, "Time is required"),
-  location: z.string().min(3, "Location must be at least 3 characters"),
-  category: z.string().min(1, "Category is required"),
-  capacity: z.coerce.number().min(1, "Capacity must be at least 1"),
-  price: z.coerce.number().min(0, "Price must be 0 or more"),
-  organizer: z.string().min(2, "Organizer name is required"),
+  title: z.string().min(3, "Protocol designation too short"),
+  description: z.string().min(10, "Abstract must be more descriptive"),
+  date: z.string().min(1, "Temporal date required"),
+  time: z.string().min(1, "Start time required"),
+  location: z.string().min(3, "Geographic node required"),
+  category: z.string().min(1, "Classification required"),
+  capacity: z.coerce.number().min(1, "Minimum 1 unit required"),
+  price: z.coerce.number().min(0, "Valuation cannot be negative"),
 });
 
 type EventFormData = z.infer<typeof eventSchema>;
@@ -66,7 +62,6 @@ export default function CreateEventPage() {
       category: "",
       capacity: 100,
       price: 25,
-      organizer: "",
     },
   });
 
@@ -75,46 +70,39 @@ export default function CreateEventPage() {
     if (file) {
       setImageFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
+      reader.onloadend = () => setImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
 
   const handleSubmit = async (data: EventFormData) => {
     if (status !== "authenticated" || !session?.user) {
-      toast.error("You must be logged in");
+      toast.error("Authorization required");
       return;
     }
 
     const organizerId = uuidSchema.safeParse(session.user.id);
     if (!organizerId.success) {
-      toast.error("Invalid organizer account. Please log in again.");
+      toast.error("Invalid session identity");
       return;
     }
 
     if (!imageFile) {
-      toast.error("Please upload an image");
+      toast.error("Media asset required");
       return;
     }
 
     try {
       setIsLoading(true);
-
       const startDatetime = new Date(`${data.date}T${data.time}`).toISOString();
-
       const endDate = new Date(`${data.date}T${data.time}`);
       endDate.setHours(endDate.getHours() + 3);
-      const endDatetime = endDate.toISOString();
-
-      const ticketType = data.price > 0 ? "PAID" : "FREE";
 
       const eventPayload = {
         title: data.title,
         description: data.description,
         startDatetime,
-        endDatetime,
+        endDatetime: endDate.toISOString(),
         timezone: "Asia/Kolkata",
         venueName: data.location.split(",")[0] || data.location,
         address: data.location,
@@ -125,278 +113,300 @@ export default function CreateEventPage() {
         availableCapacity: data.capacity,
         ticketPrice: data.price,
         currency: "INR",
-        ticketType,
+        ticketType: data.price > 0 ? "PAID" : "FREE",
         bannerS3Url: "",
         status: "PUBLISHED",
         organizerId: organizerId.data,
       };
 
       const formData = new FormData();
-
-      // Send JSON payload as plain form field for broad multipart parser compatibility.
       formData.append("data", JSON.stringify(eventPayload));
-
       formData.append("file", imageFile);
-      console.log(formData);
 
       const result = await createEvent(formData);
-      if (result?.error) {
-        throw new Error(result.error);
-      }
+      if (result?.error) throw new Error(result.error);
 
-      toast.success("Event created successfully");
-      router.push("/dashboard/events");
+      toast.success("Registry Entry Created");
+      router.push("/dashboard/my-events");
     } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || "Something went wrong");
+      toast.error(err.message || "Protocol sync failed");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="p-8">
-      <Link
-        href="/dashboard"
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Dashboard
-      </Link>
+    <div className="min-h-screen bg-[#0a0a0a] text-neutral-200 py-12 px-6 lg:px-12 selection:bg-neutral-800">
+      <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+        
+        {/* Header Ledger */}
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-neutral-900 pb-10">
+          <div className="space-y-4">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-neutral-500 hover:text-white transition-colors group"
+            >
+              <ArrowLeft className="w-3 h-3 group-hover:-translate-x-1 transition-transform" />
+              Back to Dashboard
+            </Link>
+            <div className="space-y-2">
+              
+              <h1 className="text-4xl font-medium tracking-tighter text-white">Create Event.</h1>
+              <p className="text-sm text-neutral-500 font-light italic leading-relaxed max-w-lg">
+                Initialize a new event record in the global distribution ledger. All parameters are cryptographically logged.
+              </p>
+            </div>
+          </div>
+        </header>
 
-      <div className="max-w-2xl">
-        <h1 className="text-3xl font-bold mb-2">Create New Event</h1>
-        <p className="text-muted-foreground mb-8">
-          Fill in the details below to create and publish your event
-        </p>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Event Information</CardTitle>
-            <CardDescription>
-              Provide all the necessary details for your event
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(handleSubmit as any)}
-                className="space-y-6"
-              >
-                {/* Image Upload */}
-                <FieldGroup>
-                  <FieldLabel>Event Image</FieldLabel>
-                  <div className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-secondary/50 transition-colors">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      className="hidden"
-                      id="image-upload"
-                      disabled={isLoading}
-                    />
-                    <label
-                      htmlFor="image-upload"
-                      className="cursor-pointer block"
-                    >
-                      {imagePreview ? (
-                        <div className="space-y-2">
-                          <img
-                            src={imagePreview}
-                            alt="Preview"
-                            className="w-full h-48 object-cover rounded-lg"
-                          />
-                          <p className="text-sm text-muted-foreground">
-                            Click to change image
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <Upload className="w-8 h-8 mx-auto text-muted-foreground" />
-                          <p className="font-medium">
-                            Click to upload or drag and drop
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            PNG, JPG, GIF up to 10MB
-                          </p>
-                        </div>
-                      )}
-                    </label>
-                  </div>
-                </FieldGroup>
-
-                {/* Basic Info */}
-                <FieldGroup>
-                  <FieldLabel>Event Title</FieldLabel>
-                  <Input
-                    placeholder="e.g., Annual Tech Conference 2026"
-                    {...form.register("title")}
-                    disabled={isLoading}
-                  />
-                  {form.formState.errors.title && (
-                    <p className="text-sm text-destructive">
-                      {form.formState.errors.title.message}
-                    </p>
-                  )}
-                </FieldGroup>
-
-                <FieldGroup>
-                  <FieldLabel>Description</FieldLabel>
-                  <Textarea
-                    placeholder="Describe your event in detail..."
-                    {...form.register("description")}
-                    disabled={isLoading}
-                    rows={4}
-                  />
-                  {form.formState.errors.description && (
-                    <p className="text-sm text-destructive">
-                      {form.formState.errors.description.message}
-                    </p>
-                  )}
-                </FieldGroup>
-
-                {/* Category */}
-                <FieldGroup>
-                  <FieldLabel>Category</FieldLabel>
-                  <Select
-                    value={form.watch("category")}
-                    onValueChange={(value) => form.setValue("category", value)}
-                  >
-                    <SelectTrigger disabled={isLoading}>
-                      <SelectValue placeholder="Select a category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EVENT_CATEGORIES.map((category) => (
-                        <SelectItem key={category} value={category}>
-                          {category}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {form.formState.errors.category && (
-                    <p className="text-sm text-destructive">
-                      {form.formState.errors.category.message}
-                    </p>
-                  )}
-                </FieldGroup>
-
-                {/* Date & Time */}
-                <div className="grid grid-cols-2 gap-4">
-                  <FieldGroup>
-                    <FieldLabel>Date</FieldLabel>
-                    <Input
-                      type="date"
-                      {...form.register("date")}
-                      disabled={isLoading}
-                    />
-                    {form.formState.errors.date && (
-                      <p className="text-sm text-destructive">
-                        {form.formState.errors.date.message}
-                      </p>
-                    )}
-                  </FieldGroup>
-
-                  <FieldGroup>
-                    <FieldLabel>Time</FieldLabel>
-                    <Input
-                      type="time"
-                      {...form.register("time")}
-                      disabled={isLoading}
-                    />
-                    {form.formState.errors.time && (
-                      <p className="text-sm text-destructive">
-                        {form.formState.errors.time.message}
-                      </p>
-                    )}
-                  </FieldGroup>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit as any)} className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+            
+            {/* Left Column: Form Fields */}
+            <div className="lg:col-span-8 space-y-12">
+              
+              {/* Media Asset Section */}
+              <section className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <Zap className="w-3 h-3 text-blue-500" />
+                  <h2 className="text-[10px] uppercase tracking-[0.4em] text-neutral-400 font-black">Visual Identity</h2>
                 </div>
-
-                {/* Location */}
-                <FieldGroup>
-                  <FieldLabel>Location</FieldLabel>
-                  <Input
-                    placeholder="e.g., San Francisco Convention Center"
-                    {...form.register("location")}
+                <div className="relative group border border-neutral-800 rounded-[32px] overflow-hidden bg-neutral-900/20 hover:border-neutral-700 transition-all duration-500">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                    id="image-upload"
                     disabled={isLoading}
                   />
-                  {form.formState.errors.location && (
-                    <p className="text-sm text-destructive">
-                      {form.formState.errors.location.message}
-                    </p>
-                  )}
-                </FieldGroup>
-
-                {/* Capacity & Price */}
-                <div className="grid grid-cols-2 gap-4">
-                  <FieldGroup>
-                    <FieldLabel>Capacity (attendees)</FieldLabel>
-                    <Input
-                      type="number"
-                      min="1"
-                      {...form.register("capacity")}
-                      disabled={isLoading}
-                    />
-                    {form.formState.errors.capacity && (
-                      <p className="text-sm text-destructive">
-                        {form.formState.errors.capacity.message}
-                      </p>
-                    )}
-                  </FieldGroup>
-
-                  <FieldGroup>
-                    <FieldLabel>Ticket Price (INR)</FieldLabel>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      {...form.register("price")}
-                      disabled={isLoading}
-                    />
-                    {form.formState.errors.price && (
-                      <p className="text-sm text-destructive">
-                        {form.formState.errors.price.message}
-                      </p>
-                    )}
-                  </FieldGroup>
-                </div>
-
-                {/* Organizer */}
-                <FieldGroup>
-                  <FieldLabel>Organizer Name</FieldLabel>
-                  <Input
-                    placeholder="Your name or organization"
-                    {...form.register("organizer")}
-                    disabled={isLoading}
-                  />
-                  {form.formState.errors.organizer && (
-                    <p className="text-sm text-destructive">
-                      {form.formState.errors.organizer.message}
-                    </p>
-                  )}
-                </FieldGroup>
-
-                {/* Submit */}
-                <div className="flex gap-4 pt-6">
-                  <Button type="submit" disabled={isLoading} className="flex-1">
-                    {isLoading ? (
-                      <>
-                        <Spinner className="mr-2" />
-                        Creating Event...
-                      </>
+                  <label htmlFor="image-upload" className="cursor-pointer block">
+                    {imagePreview ? (
+                      <div className="relative h-72 w-full">
+                        <img src={imagePreview} alt="Preview" className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                           <p className="text-[10px] uppercase tracking-widest font-black text-white">Replace Asset</p>
+                        </div>
+                      </div>
                     ) : (
-                      "Create Event"
+                      <div className="h-72 flex flex-col items-center justify-center gap-4 text-neutral-600 group-hover:text-neutral-400 transition-colors">
+                        <Upload className="w-8 h-8 stroke-1" />
+                        <div className="text-center">
+                          <p className="text-[10px] uppercase tracking-widest font-black">Upload Protocol Banner</p>
+                          <p className="text-[9px] mt-1 opacity-50 font-mono">1200 x 630 recommended // JPG, PNG</p>
+                        </div>
+                      </div>
                     )}
-                  </Button>
-                  <Link href="/dashboard" className="flex-1">
-                    <Button variant="outline" className="w-full" type="button">
-                      Cancel
-                    </Button>
-                  </Link>
+                  </label>
                 </div>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
+              </section>
+
+              {/* Data Registry Section */}
+              <section className="space-y-10">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                  <h2 className="text-[10px] uppercase tracking-[0.4em] text-neutral-400 font-black">Registry Metadata</h2>
+                </div>
+                
+                <div className="grid gap-8">
+                  <FormField
+                    control={form.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <FormLabel className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold">Event Designation</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="e.g., TECH_SUMMIT_2026" className="bg-neutral-900/50 border-neutral-800 rounded-xl h-12 focus:ring-0 focus:border-neutral-600 text-sm" />
+                        </FormControl>
+                        <FormMessage className="text-[10px] font-mono text-red-500" />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <FormLabel className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold">Abstract / Description</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} placeholder="Detailed protocol abstract..." className="bg-neutral-900/50 border-neutral-800 rounded-xl min-h-[150px] focus:ring-0 focus:border-neutral-600 text-sm leading-relaxed" />
+                        </FormControl>
+                        <FormMessage className="text-[10px] font-mono text-red-500" />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold">Classification</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger className="bg-neutral-900/50 border-neutral-800 rounded-xl h-12 text-[10px] uppercase tracking-widest">
+                                <SelectValue placeholder="SELECT_CATEGORY" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="bg-neutral-900 border-neutral-800 text-white">
+                              {EVENT_CATEGORIES.map((c) => (
+                                <SelectItem key={c} value={c} className="text-[10px] uppercase tracking-widest">{c}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="location"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold">Geographic Node</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Venue / City" className="bg-neutral-900/50 border-neutral-800 rounded-xl h-12 text-sm" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-8">
+                    <FormField
+                      control={form.control}
+                      name="date"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold">Registry Date</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} className="bg-neutral-900/50 border-neutral-800 rounded-xl h-12 text-sm text-neutral-400" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="time"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold">Temporal Slot</FormLabel>
+                          <FormControl>
+                            <Input type="time" {...field} className="bg-neutral-900/50 border-neutral-800 rounded-xl h-12 text-sm text-neutral-400" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-8">
+                    <FormField
+                      control={form.control}
+                      name="capacity"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold">Unit Capacity</FormLabel>
+                          <FormControl>
+                            <Input type="number" {...field} className="bg-neutral-900/50 border-neutral-800 rounded-xl h-12" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="price"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-[9px] uppercase tracking-widest text-neutral-500 font-bold">Base Valuation (INR)</FormLabel>
+                          <FormControl>
+                            <Input type="number" {...field} className="bg-neutral-900/50 border-neutral-800 rounded-xl h-12" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <div className="pt-10 flex flex-col sm:flex-row gap-6">
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="flex-1 h-16 bg-white text-black hover:bg-neutral-200 rounded-2xl font-black uppercase tracking-[0.2em] text-[11px] transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+                >
+                  {isLoading ? <Spinner className="text-black" /> : "Disseminate Protocol"}
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  type="button"
+                  onClick={() => router.back()}
+                  className="h-16 px-10 text-neutral-600 hover:text-white uppercase tracking-widest text-[10px] font-bold border border-transparent hover:border-neutral-800 rounded-2xl"
+                >
+                  Abort Registry
+                </Button>
+              </div>
+            </div>
+
+            {/* Right Column: Node Guidelines */}
+            <div className="lg:col-span-4 space-y-8">
+              <aside className="sticky top-12 space-y-6">
+                <div className="p-8 rounded-[32px] bg-neutral-900/20 border border-neutral-900 space-y-8 backdrop-blur-xl">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-500">Node Guidelines</h3>
+                  
+                  <div className="space-y-8">
+                    <GuidelineItem 
+                      icon={<Globe className="w-4 h-4" />} 
+                      title="Global Visibility" 
+                      desc="Entry status 'PUBLISHED' makes the protocol visible on the global ledger instantly." 
+                    />
+                    <GuidelineItem 
+                      icon={<Clock className="w-4 h-4" />} 
+                      title="Temporal Standards" 
+                      desc="All timestamps are recorded in Asia/Kolkata (IST) by default." 
+                    />
+                    <GuidelineItem 
+                      icon={<Banknote className="w-4 h-4" />} 
+                      title="Asset Valuation" 
+                      desc="Free events are classified as 'FREE' protocol. All PAID events incur standard processing fees." 
+                    />
+                  </div>
+
+                  <Separator className="bg-neutral-800/50" />
+
+                  <div className="flex items-start gap-4 p-4 rounded-2xl bg-neutral-950/50 border border-neutral-900">
+                    <Info className="w-4 h-4 text-neutral-500 shrink-0 mt-0.5" />
+                    <p className="text-[10px] leading-relaxed text-neutral-500 uppercase font-bold tracking-tight">
+                      Compliance verified via AES-256 encrypted tunnel. Hub Registry node: INTEL_CORE_09.
+                    </p>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </form>
+        </Form>
+
+        {/* Security Footer */}
+        <footer className="pt-10 border-t border-neutral-900 opacity-20 flex justify-between items-center">
+           <p className="text-[9px] font-mono uppercase tracking-widest text-neutral-500 flex items-center gap-2">
+             <ShieldCheck className="w-3 h-3" /> HUB_PROTOCOL_V2 // SESSION_ENCRYPTED
+           </p>
+           <p className="text-[9px] font-mono uppercase tracking-widest text-neutral-500">Sync: ACTIVE</p>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function GuidelineItem({ icon, title, desc }: { icon: any, title: string, desc: string }) {
+  return (
+    <div className="flex gap-4 group">
+      <div className="w-10 h-10 rounded-xl bg-neutral-950 border border-neutral-900 flex items-center justify-center text-neutral-600 group-hover:border-neutral-700 transition-all">
+        {icon}
+      </div>
+      <div className="space-y-1">
+        <p className="text-[10px] uppercase tracking-widest text-neutral-300 font-black">{title}</p>
+        <p className="text-[10px] text-neutral-500 leading-relaxed font-medium uppercase tracking-tight">{desc}</p>
       </div>
     </div>
   );

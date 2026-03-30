@@ -21,6 +21,8 @@ export async function POST(request: NextRequest) {
     );
     
     const userId = (decodedToken as any).userId;
+    console.log(body);
+    
     
     const response = await fetch(`${process.env.BACKEND_URL}/api/bookings`, {
       method: "POST",
@@ -31,6 +33,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         userEmail: decodedToken.sub,
+        userName: body.userName,
         eventId: body.eventId,
         quantity: body.quantity,
         unitPrice: body.unitPrice,

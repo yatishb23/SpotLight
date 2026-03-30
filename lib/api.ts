@@ -248,7 +248,7 @@ export const getAdminStats = async (options?: RequestOptions) => {
 };
 
 export const getEvents = async () => {
-  try{
+  try {
     const response = await fetch("/api/events", {
       method: "GET",
       headers: {
@@ -256,12 +256,11 @@ export const getEvents = async () => {
       },
     });
     return response.json();
-  }
-  catch(error){
+  } catch (error) {
     console.error("Error fetching events:", error);
     throw error;
   }
-}
+};
 export const getUserByUid = async (uid: string, options?: RequestOptions) => {
   return requestApi(
     {
@@ -284,15 +283,18 @@ export const getUserById = async (id: string, options?: RequestOptions) => {
   );
 };
 
-export const getUserBookings = async (userId: string,) => {
+export const getUserBookings = async (userId: string) => {
   try {
-    const response = await fetch("/api/bookings/getbyuser?userId="+encodeURIComponent(userId), {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getAccessToken()}`,
+    const response = await fetch(
+      "/api/bookings/getbyuser?userId=" + encodeURIComponent(userId),
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getAccessToken()}`,
+        },
       },
-    });
+    );
     return response.json();
   } catch (error) {
     console.error("Error fetching user bookings:", error);
@@ -300,19 +302,19 @@ export const getUserBookings = async (userId: string,) => {
   }
 };
 
-export const getBookingsByEvent = async (
-  eventId: string,
-  options?: RequestOptions,
-) => {
+export const getBookingsByEvent = async (eventId: string) => {
   try {
-    return await requestApi(
+    const response = await fetch(
+      "/api/bookings/getbyevent?eventId=" + encodeURIComponent(eventId),
       {
         method: "GET",
-        url: "/api/bookings/getbyevent",
-        params: { id: eventId },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getAccessToken()}`,
+        },
       },
-      options,
     );
+    return response.json();
   } catch (error) {
     console.error("Error fetching bookings by event:", error);
     throw error;
@@ -455,10 +457,6 @@ export const apiClient = {
 
   async getOrganizerEvents(organizerId: string, options?: RequestOptions) {
     return getEventsByOrganizerId(organizerId, options);
-  },
-
-  async getBookingsByEvent(eventId: string, options?: RequestOptions) {
-    return getBookingsByEvent(eventId, options);
   },
 
   async getAdminStats(options?: RequestOptions) {
@@ -824,14 +822,7 @@ export const getEventReviews = async (eventId: string) => {
 };
 
 export const createReview = async (
-  eventId: string,
-  data: {
-    rating: number;
-    comment: string;
-    userName: string;
-    bookingId?: string;
-  },
-  userId: string,
+  data: any
 ) => {
   try {
     const response = await fetch("/api/events/reviews", {
@@ -841,12 +832,12 @@ export const createReview = async (
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        eventId,
+        eventId: data.eventId,
         rating: data.rating,
         comment: data.comment,
         userName: data.userName,
         bookingId: data.bookingId,
-        userId,
+        userId: data.userId,
       }),
     });
 
@@ -928,18 +919,14 @@ export async function createOrder(data: Record<string, unknown>) {
 
 export const verifyPayment = async (data: any) => {
   try {
-    
-    const response = await fetch(
-      `/api/orders/verify`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getAccessToken()}`,
-        },
-        body: JSON.stringify(data),
-      }
-    );
+    const response = await fetch(`/api/orders/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`,
+      },
+      body: JSON.stringify(data),
+    });
 
     const result = await response.json();
 
@@ -954,42 +941,46 @@ export const verifyPayment = async (data: any) => {
 };
 
 export const updateOrderStatus = async (bookingId: string) => {
-    try {
-        const response = await fetch("/api/orders/update-status", {
-            method: "PATCH",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${getAccessToken()}`, // Implement getAccessToken to retrieve the token from cookies/localStorage
-            },
-            body: JSON.stringify({ bookingId }),
-        });
-        if (!response.ok) {
-            throw new Error("Failed to update order status");
-        }
-        const result = await response.json();
-        console.log("Order status updated successfully:");
-        return result?.data;
-    } catch (error) {
-        console.error("Error updating order status:", error);
+  try {
+    const response = await fetch("/api/orders/update-status", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`, // Implement getAccessToken to retrieve the token from cookies/localStorage
+      },
+      body: JSON.stringify({ bookingId }),
+    });
+    if (!response.ok) {
+      throw new Error("Failed to update order status");
     }
+    const result = await response.json();
+    console.log("Order status updated successfully:");
+    return result?.data;
+  } catch (error) {
+    console.error("Error updating order status:", error);
+  }
 };
 
-export const changePassword = async (userId: string, currentPassword: string, newPassword: string) => {
+export const changePassword = async (
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) => {
   try {
-    const response = await fetch("/api/users/changepassword", { 
+    const response = await fetch("/api/users/changepassword", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${getAccessToken()}`,
       },
-      body: JSON.stringify({userId, currentPassword, newPassword }),
+      body: JSON.stringify({ userId, currentPassword, newPassword }),
     });
     return response.json();
   } catch (error) {
     console.error("Error changing password:", error);
     throw error;
   }
-}
+};
 
 export const checkUserExistence = async (email: string, otp: string) => {
   try {
@@ -1017,12 +1008,11 @@ export const sendOTP = async (email: string) => {
       body: JSON.stringify({ email }),
     });
     return response.json();
-  }
-  catch (error) {
+  } catch (error) {
     console.error("Error sending OTP:", error);
     throw error;
   }
-}
+};
 
 export const resetPassword = async (email: string, newPassword: string) => {
   try {
@@ -1040,3 +1030,74 @@ export const resetPassword = async (email: string, newPassword: string) => {
   }
 };
 
+export const getBookedSeats = async (eventId: string) => {
+  try {
+    const response = await fetch(
+      `/api/bookings/getbookedseats?eventId=${encodeURIComponent(eventId)}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getAccessToken()}`,
+        },
+      },
+    );
+    return response.json();
+  } catch (error) {
+    console.error("Error fetching booked seats:", error);
+    throw error;
+  }
+};
+
+createReview;
+
+export const requestOrganizerAccess = async (userId:string) => {
+  try {
+    const response = await fetch("/api/users/request-organizer?id=" + userId, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`
+      }
+    });
+    const data = await response.json();
+    return { success: true, message: data?.message || "Request submitted successfully" };
+  } catch (error) {
+    console.error("Error requesting organizer access:", error);
+    throw error;
+  }
+};
+
+export const getRequestStatus = async () => {
+  try {
+    const response = await fetch("/api/users/request-organizer", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`
+      }
+    });
+    return response.json();
+  } catch (error) {
+    console.error("Error requesting organizer access:", error);
+    throw error;
+  }
+};
+
+
+export const changeUserStatus = async (userId:string , isApproved:boolean) => {
+  try {
+    const response = await fetch("/api/users/request-organizer?id=" + userId, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`
+      },
+      body: JSON.stringify({ isApproved })
+    });
+    return response.json();
+  } catch (error) {
+    console.error("Error requesting organizer access:", error);
+    throw error;
+  }
+};

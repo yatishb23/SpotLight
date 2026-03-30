@@ -77,12 +77,12 @@ export default function Home() {
   const categoriesToShow = useMemo(() => Object.keys(eventsByCategory), [eventsByCategory]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-zinc-100 selection:text-zinc-900">
+    <div className="min-h-screen bg-[#050505] text-neutral-200 selection:bg-neutral-800">
       
       {/* Hero Section */}
       {(!selectedCategory || selectedCategory === "All") && !isLoading && events.length > 0 && (
         <div className="relative pt-6 pb-12 overflow-hidden">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-zinc-100/[0.02] blur-[120px] rounded-full" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-neutral-100/[0.02] blur-[120px] rounded-full" />
           <div className="max-w-[1440px] mx-auto">
             <FeaturedCarousel events={events.slice(0, 5)} />
           </div>
@@ -103,8 +103,8 @@ export default function Home() {
             {selectedCategory && selectedCategory !== "All" ? (
               <div className="min-h-[60vh] px-6">
                 <div className="flex items-center gap-3 py-10">
-                  <Sparkles className="w-6 h-6 text-zinc-500" />
-                  <h1 className="text-4xl font-black tracking-tighter uppercase italic">{selectedCategory}</h1>
+                  <Sparkles className="w-6 h-6 text-neutral-500" />
+                  <h1 className="text-4xl font-black tracking-tighter text-white uppercase italic">{selectedCategory}</h1>
                 </div>
                 <CategorySection
                   title="Featured"
@@ -132,27 +132,27 @@ export default function Home() {
       </main>
 
       {/* Professional Minimal Footer */}
-      <footer className="border-t border-zinc-900 bg-zinc-950 pt-20 pb-10">
+      <footer className="border-t border-neutral-900 bg-[#050505] pt-20 pb-10">
         <div className="max-w-[1440px] mx-auto px-6 md:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-20">
             <div className="col-span-1 md:col-span-1">
-              <span className="text-2xl font-black italic tracking-tighter uppercase mb-6 block">EventHub</span>
-              <p className="text-zinc-500 text-sm leading-relaxed max-w-xs">
-                Premium ticketing experience for the world's most exclusive events. Curated for the modern enthusiast.
+              <span className="text-2xl font-black italic tracking-tighter uppercase mb-6 text-white block">EventHub</span>
+              <p className="text-neutral-500 text-sm leading-relaxed max-w-xs">
+                Premium protocol ticketing experience for the network's most exclusive ledgers.
               </p>
             </div>
             
             {[
               { title: "Network", links: ["Movies", "Concerts", "Workshops", "Sports"] },
-              { title: "Company", links: ["About", "Careers", "Press", "Impact"] },
-              { title: "Legal", links: ["Terms", "Privacy", "Cookies", "Safety"] }
+              { title: "Governance", links: ["About", "Careers", "Press", "Impact"] },
+              { title: "Protocol Policy", links: ["Terms", "Privacy", "Cookies", "Safety"] }
             ].map((col) => (
               <div key={col.title}>
-                <h4 className="text-[11px] font-bold text-zinc-300 uppercase tracking-[0.2em] mb-6">{col.title}</h4>
+                <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-6">{col.title}</h4>
                 <ul className="space-y-3">
                   {col.links.map(link => (
                     <li key={link}>
-                      <Link href="#" className="text-zinc-500 hover:text-zinc-100 text-sm transition-colors">{link}</Link>
+                      <Link href="#" className="text-[10px] font-bold uppercase tracking-widest text-neutral-600 hover:text-white transition-colors">{link}</Link>
                     </li>
                   ))}
                 </ul>
@@ -160,14 +160,14 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="flex flex-col md:flex-row justify-between items-center pt-10 border-t border-zinc-900 gap-6">
-            <p className="text-zinc-600 text-[11px] tracking-widest uppercase font-medium">
-              © 2026 EVENTHUB GLOBAL LTD. ALL RIGHTS RESERVED.
+          <div className="flex flex-col md:flex-row justify-between items-center pt-10 border-t border-neutral-900 gap-6">
+            <p className="text-neutral-600 text-[9px] tracking-[0.3em] font-mono uppercase font-black">
+              © 2026 EVENTHUB GLOBAL INC. SYS_VERIFIED.
             </p>
             <div className="flex gap-8">
-              <Globe className="w-4 h-4 text-zinc-600 hover:text-zinc-100 cursor-pointer transition-colors" />
-              <ShieldCheck className="w-4 h-4 text-zinc-600 hover:text-zinc-100 cursor-pointer transition-colors" />
-              <Headphones className="w-4 h-4 text-zinc-600 hover:text-zinc-100 cursor-pointer transition-colors" />
+              <Globe className="w-4 h-4 text-neutral-600 hover:text-white cursor-pointer transition-colors" />
+              <ShieldCheck className="w-4 h-4 text-emerald-500 hover:text-emerald-400 cursor-pointer transition-colors" />
+              <Headphones className="w-4 h-4 text-neutral-600 hover:text-white cursor-pointer transition-colors" />
             </div>
           </div>
         </div>
