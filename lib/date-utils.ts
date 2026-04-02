@@ -4,11 +4,11 @@
  * @returns Formatted date (e.g., "Mar 15, 2026")
  */
 export function formatDate(date: string | Date): string {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return dateObj.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
+  const dateObj = typeof date === "string" ? new Date(date) : date;
+  return dateObj.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
 }
 
@@ -21,10 +21,10 @@ export function formatDate(date: string | Date): string {
 export function formatDateTime(date: string | Date, time: string): string {
   const dateStr = formatDate(date);
   const timeObj = parseTime(time);
-  const timeStr = timeObj.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    meridiem: 'short',
+  const timeStr = timeObj.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
   return `${dateStr} at ${timeStr}`;
 }
@@ -35,7 +35,7 @@ export function formatDateTime(date: string | Date, time: string): string {
  * @returns Date object with today's date and specified time
  */
 export function parseTime(timeStr: string): Date {
-  const [hours, minutes] = timeStr.split(':').map(Number);
+  const [hours, minutes] = timeStr.split(":").map(Number);
   const date = new Date();
   date.setHours(hours, minutes, 0, 0);
   return date;
@@ -47,7 +47,7 @@ export function parseTime(timeStr: string): Date {
  * @returns true if date is in the past
  */
 export function isPastDate(date: string | Date): boolean {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const dateObj = typeof date === "string" ? new Date(date) : date;
   return dateObj < new Date();
 }
 
@@ -57,7 +57,7 @@ export function isPastDate(date: string | Date): boolean {
  * @returns Relative time string
  */
 export function getRelativeTime(date: string | Date): string {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const dateObj = typeof date === "string" ? new Date(date) : date;
   const now = new Date();
   const diffMs = dateObj.getTime() - now.getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -65,16 +65,16 @@ export function getRelativeTime(date: string | Date): string {
   const diffDays = Math.floor(diffMs / 86400000);
 
   if (Math.abs(diffMins) < 1) {
-    return 'now';
+    return "now";
   }
   if (Math.abs(diffMins) < 60) {
-    return `${diffMins > 0 ? 'in' : ''} ${Math.abs(diffMins)} minute${Math.abs(diffMins) !== 1 ? 's' : ''} ${diffMins < 0 ? 'ago' : ''}`;
+    return `${diffMins > 0 ? "in" : ""} ${Math.abs(diffMins)} minute${Math.abs(diffMins) !== 1 ? "s" : ""} ${diffMins < 0 ? "ago" : ""}`;
   }
   if (Math.abs(diffHours) < 24) {
-    return `${diffHours > 0 ? 'in' : ''} ${Math.abs(diffHours)} hour${Math.abs(diffHours) !== 1 ? 's' : ''} ${diffHours < 0 ? 'ago' : ''}`;
+    return `${diffHours > 0 ? "in" : ""} ${Math.abs(diffHours)} hour${Math.abs(diffHours) !== 1 ? "s" : ""} ${diffHours < 0 ? "ago" : ""}`;
   }
   if (Math.abs(diffDays) < 365) {
-    return `${diffDays > 0 ? 'in' : ''} ${Math.abs(diffDays)} day${Math.abs(diffDays) !== 1 ? 's' : ''} ${diffDays < 0 ? 'ago' : ''}`;
+    return `${diffDays > 0 ? "in" : ""} ${Math.abs(diffDays)} day${Math.abs(diffDays) !== 1 ? "s" : ""} ${diffDays < 0 ? "ago" : ""}`;
   }
 
   return formatDate(dateObj);
@@ -86,9 +86,9 @@ export function getRelativeTime(date: string | Date): string {
  * @returns Formatted price (e.g., "$29.99")
  */
 export function formatPrice(price: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
   }).format(price);
 }
 
@@ -102,15 +102,15 @@ export function formatTimeRange(startTime: string, endTime: string): string {
   const start = parseTime(startTime);
   const end = parseTime(endTime);
 
-  const startStr = start.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    meridiem: 'short',
+  const startStr = start.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
-  const endStr = end.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    meridiem: 'short',
+  const endStr = end.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
 
   return `${startStr} - ${endStr}`;

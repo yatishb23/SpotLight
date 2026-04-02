@@ -1,24 +1,45 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { SessionProvider } from "next-auth/react";
 import { SiteHeader } from "@/components/site-header";
 import { CitySelectorModal } from "@/components/city-selector-modal";
 
-export function SiteLayout({ children }: { children: React.ReactNode }) {
+function HeaderWrapper({
+  selectedCity,
+  setIsCityModalOpen,
+}: {
+  selectedCity: string;
+  setIsCityModalOpen: (open: boolean) => void;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const pathname = usePathname(); // ✅ important
-
   const selectedCategory = searchParams.get("category") || "";
+
+  const handleSelectCategory = (category: string) => {
+    const url = category === "" ? "/" : `/?category=${category}`;
+    router.push(url);
+  };
+
+  return (
+    <SiteHeader
+      selectedCity={selectedCity}
+      onSelectCity={() => setIsCityModalOpen(true)}
+      selectedCategory={selectedCategory}
+      onSelectCategory={handleSelectCategory}
+    />
+  );
+}
+
+export function SiteLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname(); // ✅ important
 
   const [mounted, setMounted] = useState(false);
   const [selectedCity, setSelectedCity] = useState<string>("");
   const [isCityModalOpen, setIsCityModalOpen] = useState(false);
 
-  const isAuthPage =
-    pathname === "/auth/**" || pathname.startsWith("/auth/");
+  const isAuthPage = pathname === "/auth/**" || pathname.startsWith("/auth/");
 
   useEffect(() => {
     if (isAuthPage) return; // ❌ don't run for auth pages
@@ -36,16 +57,9 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
     setSelectedCity(city);
     localStorage.setItem("selectedCity", city);
 
-    window.dispatchEvent(
-      new CustomEvent("cityChanged", { detail: { city } })
-    );
+    window.dispatchEvent(new CustomEvent("cityChanged", { detail: { city } }));
 
     setIsCityModalOpen(false);
-  };
-
-  const handleSelectCategory = (category: string) => {
-    const url = category === "" ? "/" : `/?category=${category}`;
-    router.push(url);
   };
 
   // ✅ If auth page → return children only (no layout)
@@ -58,22 +72,29 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <div className="flex flex-col min-h-screen">
-        <SiteHeader
-          selectedCity={selectedCity}
-          onSelectCity={() => setIsCityModalOpen(true)}
-          selectedCategory={selectedCategory}
-          onSelectCategory={handleSelectCategory}
-        />
-        
+        <Suspense
+          fallback={
+            <SiteHeader
+              selectedCity={selectedCity}
+              onSelectCity={() => setIsCityModalOpen(true)}
+              selectedCategory=""
+              onSelectCategory={() => {}}
+            />
+          }
+        >
+          <HeaderWrapper
+            selectedCity={selectedCity}
+            setIsCityModalOpen={setIsCityModalOpen}
+          />
+        </Suspense>
+
         <CitySelectorModal
           open={isCityModalOpen}
           onOpenChange={setIsCityModalOpen}
           onSelect={handleCitySelect}
         />
-        
-        <main className="flex-1 bg-zinc-950 text-zinc-100">
-          {children}
-        </main>
+
+        <main className="flex-1 bg-zinc-950 text-zinc-100">{children}</main>
       </div>
     </SessionProvider>
   );

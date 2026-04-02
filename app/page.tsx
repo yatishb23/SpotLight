@@ -1,35 +1,40 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { LoadingState } from '@/components/loading-state';
-import { ErrorFallback } from '@/components/error-fallback';
-import Link from 'next/link';
-import type { Event as AppEvent } from '@/lib/types';
-import { FeaturedCarousel } from '@/components/featured-carousel';
-import { CategorySection } from '@/components/category-section';
-import { apiClient } from '@/lib/api';
-import { Globe, ShieldCheck, Headphones, Sparkles } from 'lucide-react';
+import { Suspense } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import { LoadingState } from "@/components/loading-state";
+import { ErrorFallback } from "@/components/error-fallback";
+import Link from "next/link";
+import type { Event as AppEvent } from "@/lib/types";
+import { FeaturedCarousel } from "@/components/featured-carousel";
+import { CategorySection } from "@/components/category-section";
+import { apiClient } from "@/lib/api";
+import { Globe, ShieldCheck, Headphones, Sparkles } from "lucide-react";
 
-export default function Home() {
+function HomeContent() {
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCity, setSelectedCity] = useState<string>('');
+  const [selectedCity, setSelectedCity] = useState<string>("");
 
   const searchParams = useSearchParams();
-  const selectedCategory = searchParams.get('category') || '';
+  const selectedCategory = searchParams.get("category") || "";
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
-    const savedCity = localStorage.getItem('selectedCity') || 'Mumbai';
+    const savedCity = localStorage.getItem("selectedCity") || "Mumbai";
     setSelectedCity(savedCity);
     const handleCityChanged = (event: any) => {
       const newCity = event.detail?.city;
       if (newCity) setSelectedCity(newCity);
     };
-    window.addEventListener('cityChanged', handleCityChanged as EventListener);
-    return () => window.removeEventListener('cityChanged', handleCityChanged as EventListener);
+    window.addEventListener("cityChanged", handleCityChanged as EventListener);
+    return () =>
+      window.removeEventListener(
+        "cityChanged",
+        handleCityChanged as EventListener,
+      );
   }, []);
 
   useEffect(() => {
@@ -39,10 +44,12 @@ export default function Home() {
         setIsLoading(true);
         setError(null);
         const payload = await apiClient.getEventsByCity(selectedCity);
-        const nextEvents = Array.isArray(payload) ? payload : (payload as any)?.data || [];
+        const nextEvents = Array.isArray(payload)
+          ? payload
+          : (payload as any)?.data || [];
         setEvents(nextEvents);
       } catch {
-        setError('Unable to load events for this city.');
+        setError("Unable to load events for this city.");
       } finally {
         setIsLoading(false);
       }
@@ -51,31 +58,39 @@ export default function Home() {
   }, [selectedCity]);
 
   useEffect(() => {
-    if (selectedCategory && selectedCategory !== 'All') {
+    if (selectedCategory && selectedCategory !== "All") {
       setTimeout(() => {
-        sectionRefs.current[selectedCategory]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        sectionRefs.current[selectedCategory]?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
       }, 300);
     }
   }, [selectedCategory, isLoading]);
 
   const eventsByCategory = useMemo(() => {
-    return events.reduce((acc, event) => {
-      const cat = event.category || 'Other';
-      if (!acc[cat]) acc[cat] = [];
-      acc[cat].push(event);
-      return acc;
-    }, {} as Record<string, AppEvent[]>);
+    return events.reduce(
+      (acc, event) => {
+        const cat = event.category || "Other";
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(event);
+        return acc;
+      },
+      {} as Record<string, AppEvent[]>,
+    );
   }, [events]);
 
-  const categoriesToShow = useMemo(() => Object.keys(eventsByCategory), [eventsByCategory]);
+  const categoriesToShow = useMemo(
+    () => Object.keys(eventsByCategory),
+    [eventsByCategory],
+  );
 
   return (
     <div className="min-h-screen bg-[#050505] text-neutral-200">
-
       {/* Hero */}
-      {(!selectedCategory || selectedCategory === 'All') && !isLoading && events.length > 0 && (
-        <FeaturedCarousel events={events.slice(0, 5)} />
-      )}
+      {(!selectedCategory || selectedCategory === "All") &&
+        !isLoading &&
+        events.length > 0 && <FeaturedCarousel events={events.slice(0, 5)} />}
 
       {/* Main Content */}
       <main className="max-w-[1440px] mx-auto pb-24">
@@ -93,8 +108,7 @@ export default function Home() {
           </div>
         ) : (
           <div>
-            {selectedCategory && selectedCategory !== 'All' ? (
-
+            {selectedCategory && selectedCategory !== "All" ? (
               /* Filtered category view */
               <div className="px-6 md:px-10">
                 <div className="flex items-center gap-3 py-12 border-b border-white/[0.04]">
@@ -109,9 +123,7 @@ export default function Home() {
                   className="border-0 pt-10"
                 />
               </div>
-
             ) : (
-
               /* Default all-category view */
               <div>
                 <CategorySection
@@ -122,12 +134,14 @@ export default function Home() {
                 {categoriesToShow.map((category, index) => (
                   <div
                     key={category}
-                    ref={(el) => { sectionRefs.current[category] = el; }}
+                    ref={(el) => {
+                      sectionRefs.current[category] = el;
+                    }}
                   >
                     <CategorySection
                       title={category}
                       events={eventsByCategory[category]}
-                      background={index % 2 === 0 ? 'default' : 'muted'}
+                      background={index % 2 === 0 ? "default" : "muted"}
                     />
                   </div>
                 ))}
@@ -140,10 +154,8 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-white/[0.04] bg-[#050505] pt-16 pb-10">
         <div className="max-w-[1440px] mx-auto px-6 md:px-10">
-
           {/* Footer columns */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-16">
-
             {/* Brand */}
             <div className="col-span-2 md:col-span-1">
               <span className="text-[15px] font-semibold text-white tracking-tight block mb-3">
@@ -156,9 +168,18 @@ export default function Home() {
 
             {/* Links */}
             {[
-              { title: 'Explore', links: ['Movies', 'Concerts', 'Workshops', 'Sports'] },
-              { title: 'Company', links: ['About', 'Careers', 'Press', 'Impact'] },
-              { title: 'Legal', links: ['Terms', 'Privacy', 'Cookies', 'Safety'] },
+              {
+                title: "Explore",
+                links: ["Movies", "Concerts", "Workshops", "Sports"],
+              },
+              {
+                title: "Company",
+                links: ["About", "Careers", "Press", "Impact"],
+              },
+              {
+                title: "Legal",
+                links: ["Terms", "Privacy", "Cookies", "Safety"],
+              },
             ].map((col) => (
               <div key={col.title}>
                 <h4 className="text-[9px] font-semibold text-white/20 uppercase tracking-[0.4em] mb-5">
@@ -194,5 +215,13 @@ export default function Home() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <HomeContent />
+    </Suspense>
   );
 }
