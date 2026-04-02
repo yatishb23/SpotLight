@@ -56,13 +56,21 @@ export default function MyEventsPage() {
       }
     };
 
-    if (session?.user?.role === "organizer" || session?.user?.role === "admin") {
+    if (
+      session?.user?.role === "organizer" ||
+      session?.user?.role === "admin"
+    ) {
       fetchEvents();
     }
   }, [session]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Protocol Warning: Deleting this event will remove all metadata from the ledger.")) return;
+    if (
+      !confirm(
+        "Protocol Warning: Deleting this event will remove all metadata from the ledger.",
+      )
+    )
+      return;
     toast.info("Deletion sequence initialized");
   };
 
@@ -75,9 +83,8 @@ export default function MyEventsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-neutral-200 py-16 px-6 lg:px-12 selection:bg-neutral-800">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-        
         {/* Header Ledger */}
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-neutral-900 pb-10">
           <div className="space-y-2">
@@ -91,7 +98,8 @@ export default function MyEventsPage() {
               Event Management.
             </h1>
             <p className="text-sm text-neutral-500 font-light italic leading-relaxed max-w-lg">
-              Authorized controller for active event identities and historical dissemination records.
+              Authorized controller for active event identities and historical
+              dissemination records.
             </p>
           </div>
           <Link href="/dashboard/create-event">
@@ -106,23 +114,36 @@ export default function MyEventsPage() {
             <div className="w-16 h-16 bg-neutral-900 rounded-full flex items-center justify-center mx-auto mb-6 border border-neutral-800">
               <Calendar className="h-6 w-6 text-neutral-500" />
             </div>
-            <h3 className="text-xl font-medium text-white mb-2 tracking-tight">Zero Protocols Found</h3>
+            <h3 className="text-xl font-medium text-white mb-2 tracking-tight">
+              Zero Protocols Found
+            </h3>
             <p className="text-neutral-500 mb-8 max-w-xs mx-auto text-sm italic">
-              No active event identities currently registered under this organizer ID.
+              No active event identities currently registered under this
+              organizer ID.
             </p>
-            <Button variant="outline" className="border-neutral-800 hover:bg-neutral-900 rounded-xl" asChild>
+            <Button
+              variant="outline"
+              className="border-neutral-800 hover:bg-neutral-900 rounded-xl"
+              asChild
+            >
               <Link href="/dashboard/create-event">Initialize First Entry</Link>
             </Button>
           </div>
         ) : (
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
             {events.map((event) => (
-              <Card key={event.id} className="group relative bg-[#0a0a0a] border-neutral-900 rounded-[32px] overflow-hidden transition-all duration-500 hover:border-neutral-700 shadow-2xl">
-                
+              <Card
+                key={event.id}
+                className="group relative bg-[#0a0a0a] border-neutral-900 rounded-[32px] overflow-hidden transition-all duration-500 hover:border-neutral-700 shadow-2xl"
+              >
                 {/* Visual Identity Section */}
                 <div className="relative h-56 w-full overflow-hidden">
                   <Image
-                    src={event.image || event.bannerS3Url || "/placeholder-event.jpg"}
+                    src={
+                      event.image ||
+                      event.bannerS3Url ||
+                      "/placeholder-event.jpg"
+                    }
                     alt={event.title}
                     fill
                     className="object-cover grayscale group-hover:grayscale-0 transition-all duration-700"
@@ -137,22 +158,32 @@ export default function MyEventsPage() {
 
                 <CardHeader className="space-y-4 p-8">
                   <div className="space-y-1">
-                    <p className="text-[9px] font-bold text-neutral-600 uppercase tracking-widest">Protocol Designation</p>
+                    <p className="text-[9px] font-bold text-neutral-600 uppercase tracking-widest">
+                      Protocol Designation
+                    </p>
                     <CardTitle className="text-xl font-bold text-white tracking-tight leading-tight line-clamp-1">
                       {event.title}
                     </CardTitle>
                   </div>
-                  
+
                   <div className="flex items-center gap-4 text-[10px] font-mono text-neutral-500 uppercase tracking-tighter">
-                     <span className="flex items-center gap-2">
-                       <Calendar className="h-3 w-3 text-neutral-700" /> 
-                       {format(new Date(event.startDatetime || event.date || new Date()), "dd.MM.yy")}
-                     </span>
-                     <Separator orientation="vertical" className="h-3 bg-neutral-800" />
-                     <span className="flex items-center gap-2">
-                       <MapPin className="h-3 w-3 text-neutral-700" /> 
-                       {event.city || "REMOTE"}
-                     </span>
+                    <span className="flex items-center gap-2">
+                      <Calendar className="h-3 w-3 text-neutral-700" />
+                      {format(
+                        new Date(
+                          event.startDatetime || event.date || new Date(),
+                        ),
+                        "dd.MM.yy",
+                      )}
+                    </span>
+                    <Separator
+                      orientation="vertical"
+                      className="h-3 bg-neutral-800"
+                    />
+                    <span className="flex items-center gap-2">
+                      <MapPin className="h-3 w-3 text-neutral-700" />
+                      {event.city || "REMOTE"}
+                    </span>
                   </div>
                 </CardHeader>
 
@@ -161,11 +192,21 @@ export default function MyEventsPage() {
                   <div className="bg-neutral-900/40 rounded-2xl p-4 border border-neutral-800/50 space-y-4">
                     <div className="flex justify-between items-end">
                       <div className="space-y-1">
-                        <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Inventory Dispatched</p>
-                        <p className="text-sm font-medium text-white">{event.ticketsSold || 0} / {event.capacity || event.totalCapacity}</p>
+                        <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">
+                          Inventory Dispatched
+                        </p>
+                        <p className="text-sm font-medium text-white">
+                          {event.ticketsSold || 0} /{" "}
+                          {event.capacity || event.totalCapacity}
+                        </p>
                       </div>
                       <p className="text-[10px] font-mono text-emerald-500">
-                        {Math.round(((event.ticketsSold || 0) / (event.capacity || event.totalCapacity)) * 100)}%
+                        {Math.round(
+                          ((event.ticketsSold || 0) /
+                            (event.capacity || event.totalCapacity)) *
+                            100,
+                        )}
+                        %
                       </p>
                     </div>
                     <div className="w-full bg-neutral-800 h-1 rounded-full overflow-hidden">
@@ -180,16 +221,24 @@ export default function MyEventsPage() {
                 </CardContent>
 
                 <CardFooter className="p-8 pt-4 flex gap-3">
-                  <Button variant="outline" className="flex-1 bg-transparent border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-900 rounded-xl text-[9px] font-black uppercase tracking-widest h-10" asChild>
+                  <Button
+                    variant="outline"
+                    className="flex-1 bg-transparent border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-900 rounded-xl text-[9px] font-black uppercase tracking-widest h-10"
+                    asChild
+                  >
                     <Link href={`/events/${event.id}`}>
                       <Eye className="w-3.5 h-3.5 mr-2" /> Inspect
                     </Link>
                   </Button>
-                  
-                  <Button variant="outline" size="icon" className="border-neutral-800 hover:bg-neutral-900 text-neutral-500 rounded-xl h-10 w-10">
+
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="border-neutral-800 hover:bg-neutral-900 text-neutral-500 rounded-xl h-10 w-10"
+                  >
                     <Edit className="h-3.5 w-3.5" />
                   </Button>
-                  
+
                   <Button
                     variant="ghost"
                     size="icon"
@@ -206,10 +255,12 @@ export default function MyEventsPage() {
 
         {/* Security Note */}
         <footer className="pt-10 border-t border-neutral-900 opacity-20 flex justify-between items-center">
-           <p className="text-[9px] font-mono uppercase tracking-widest text-neutral-500 flex items-center gap-2">
-             <ShieldCheck className="w-3 h-3" /> HUB_NODE_V2 // ACCESS_RESTRICTED
-           </p>
-           <p className="text-[9px] font-mono uppercase tracking-widest text-neutral-500">Registry Sync: 100%</p>
+          <p className="text-[9px] font-mono uppercase tracking-widest text-neutral-500 flex items-center gap-2">
+            <ShieldCheck className="w-3 h-3" /> HUB_NODE_V2 // ACCESS_RESTRICTED
+          </p>
+          <p className="text-[9px] font-mono uppercase tracking-widest text-neutral-500">
+            Registry Sync: 100%
+          </p>
         </footer>
       </div>
     </div>

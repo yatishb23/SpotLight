@@ -8,13 +8,16 @@ export async function POST(req: NextRequest) {
   if (!email || !password) {
     return NextResponse.json(
       { error: "Email and password are required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      AUTH_REQUEST_TIMEOUT_MS,
+    );
 
     const response = await fetch(`${process.env.BACKEND_URL}/api/auth/login`, {
       method: "POST",
@@ -36,11 +39,11 @@ export async function POST(req: NextRequest) {
         data = { message: text };
       }
     }
-    
+
     if (!data?.success) {
       return NextResponse.json(
         { error: data?.message || "Invalid email or password" },
-        { status: data?.code || response.status || 401 }
+        { status: data?.code || response.status || 401 },
       );
     }
     // localStorage.setItem('userId', data.user.id);
@@ -49,11 +52,11 @@ export async function POST(req: NextRequest) {
       user: data,
     });
     return res;
-
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[Login Error]", error);
     return NextResponse.json(
-      { error: "An error occurred during login" },
-      { status: 500 }
+      { error: "An error occurred during login. Backend may be offline." },
+      { status: 503 },
     );
   }
 }

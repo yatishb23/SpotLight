@@ -5,8 +5,8 @@ type ProxyOptions = {
 };
 
 const gatewayUrl =
-  process.env.API_GATEWAY_URL ||
   process.env.BACKEND_URL ||
+  process.env.API_GATEWAY_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "http://localhost:1111";
 
@@ -33,7 +33,8 @@ function getServiceBaseUrl(pathname: string) {
   ) {
     return trimTrailingSlash(bookingUrl);
   }
-  if (pathname.startsWith("/api/payments")) return trimTrailingSlash(paymentUrl);
+  if (pathname.startsWith("/api/payments"))
+    return trimTrailingSlash(paymentUrl);
   if (pathname.startsWith("/api/notifications")) {
     return trimTrailingSlash(notificationUrl);
   }

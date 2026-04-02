@@ -21,7 +21,7 @@ import { Spinner } from "@/components/ui/spinner";
 const ticketSchema = z.object({
   attendeeName: z.string().min(2, "Name must be at least 2 characters"),
   attendeeEmail: z.string().email("Invalid email address"),
-  quantity: z.coerce
+  quantity: z
     .number()
     .min(1, "Quantity must be at least 1")
     .max(10, "Maximum 10 tickets per booking"),

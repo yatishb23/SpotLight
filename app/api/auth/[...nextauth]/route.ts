@@ -10,8 +10,6 @@ function trimTrailingSlash(value: string) {
 
 function getAuthServiceBaseUrl() {
   return trimTrailingSlash(
-    process.env.AUTH_SERVICE_URL ||
-      process.env.API_GATEWAY_URL ||
       process.env.BACKEND_URL ||
       "http://localhost:1111",
   );
@@ -22,7 +20,7 @@ async function postAuthService(path: string, payload: unknown) {
   const timeout = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${getAuthServiceBaseUrl()}${path}`, {
+    const response = await fetch(`${process.env.BACKEND_URL}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

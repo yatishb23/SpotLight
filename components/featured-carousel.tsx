@@ -18,128 +18,149 @@ export function FeaturedCarousel({ events }: FeaturedCarouselProps) {
 
   useEffect(() => {
     if (featuredEvents.length <= 1) return;
-    
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % featuredEvents.length);
     }, 5000);
-
     return () => clearInterval(interval);
   }, [featuredEvents.length]);
 
   if (featuredEvents.length === 0) return null;
 
   const currentEvent = featuredEvents[currentIndex];
-  
-  const imageUrl = currentEvent.bannerS3Url || (currentEvent as any).image || '/placeholder.svg';
-  const displayDate = currentEvent.startDatetime 
-    ? new Date(currentEvent.startDatetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : (currentEvent as any).date || "Awaiting Data";
+  const imageUrl =
+    currentEvent.bannerS3Url || (currentEvent as any).image || '/placeholder.svg';
+  const displayDate = currentEvent.startDatetime
+    ? new Date(currentEvent.startDatetime).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : (currentEvent as any).date || 'TBA';
   const displayTime = currentEvent.startDatetime
-    ? new Date(currentEvent.startDatetime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-    : (currentEvent as any).time || "TBD";
-  const displayLocation = currentEvent.venueName 
-    ? `${currentEvent.venueName}, ${currentEvent.city || ''}` 
-    : (currentEvent as any).location || "Registry Location Error";
+    ? new Date(currentEvent.startDatetime).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : (currentEvent as any).time || 'TBA';
+  const displayLocation = currentEvent.venueName
+    ? `${currentEvent.venueName}${currentEvent.city ? `, ${currentEvent.city}` : ''}`
+    : (currentEvent as any).location || 'Location TBA';
 
   const persistSelectedEvent = () => {
     sessionStorage.setItem('selectedEvent', JSON.stringify(currentEvent));
   };
 
   return (
-    <div className="relative w-full h-[300px] md:h-[450px] overflow-hidden bg-[#0a0a0a] border-b border-neutral-900">
-      <AnimatePresence mode="wait">
+    <div className="relative w-full h-[340px] md:h-[480px] overflow-hidden">
+
+      {/* Blurred background */}
+      <AnimatePresence>
         <motion.div
-          key={currentEvent.id}
+          key={`bg-${currentEvent.id}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.5 }}
-          className="relative h-full w-full"
+          transition={{ duration: 0.8 }}
+          className="absolute inset-0"
         >
-          {/* Main Background Image */}
-           <div className="absolute inset-0 overflow-hidden">
-             <Image
-               src={imageUrl}
-               alt={currentEvent.title?.trim() || 'Featured event image'}
-               fill
-               className="object-cover blur-[100px] opacity-30 scale-110 grayscale"
-             />
-             <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#0a0a0a]/80 to-transparent" />
-          </div>
-
-          {/* Content Container */}
-          <div className="w-full max-w-7xl relative h-full mx-auto px-6 lg:px-12 flex items-center justify-center md:justify-start">
-             <div className="flex flex-col md:flex-row items-center gap-8 md:gap-16 w-full mx-auto">
-                
-                {/* Poster Image */}
-                <motion.div 
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="hidden md:block relative w-[240px] h-[360px] rounded-[24px] overflow-hidden shadow-2xl shrink-0 border border-neutral-800 bg-[#050505]"
-                >
-                   <Image
-                     src={imageUrl}
-                     alt={currentEvent.title?.trim() || 'Featured event poster'}
-                     fill
-                     className="object-cover grayscale hover:grayscale-0 transition-all duration-700"
-                   />
-                </motion.div>
-
-                {/* Text Content */}
-                <motion.div 
-                  initial={{ x: 20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                  className="flex-1 space-y-6 text-center md:text-left text-neutral-200"
-                >
-                   <div className="flex items-center justify-center md:justify-start gap-4 mb-2">
-                      <span className="bg-white text-black px-3 py-1 rounded-sm text-[9px] font-black uppercase tracking-widest">
-                        Tier 1 Network
-                      </span>
-                      <span className="text-neutral-500 text-[9px] font-bold uppercase tracking-[0.2em]">
-                         Protocol: {currentEvent.category || "UNCLASSIFIED"}
-                      </span>
-                   </div>
-
-                   <h1 className="text-4xl md:text-6xl font-medium tracking-tighter leading-none text-white italic">
-                     {currentEvent.title}
-                   </h1>
-                   
-                   <div className="flex items-center justify-center md:justify-start gap-6 text-[10px] font-mono uppercase tracking-widest text-neutral-500">
-                      <span className="flex items-center gap-2"><Calendar className="w-3 h-3"/> {displayDate}</span>
-                      <span className="flex items-center gap-2"><Clock className="w-3 h-3"/> {displayTime}</span>
-                      <span className="flex items-center gap-2 truncate max-w-[200px]"><MapPin className="w-3 h-3"/> {displayLocation}</span>
-                   </div>
-
-                   <p className="text-neutral-500 text-sm font-light leading-relaxed line-clamp-2 max-w-xl mx-auto md:mx-0 pr-4">
-                      {currentEvent.description}
-                   </p>
-
-                   <div className="pt-4">
-                      <Link href={`/events/${currentEvent.id}`} onClick={persistSelectedEvent}>
-                        <Button className="w-full md:w-auto bg-white text-black hover:bg-neutral-200 font-black uppercase tracking-[0.2em] text-[10px] px-10 h-12 rounded-xl group transition-all">
-                          Initialize Access <ArrowRight className="w-3 h-3 ml-2 group-hover:translate-x-1 transition-transform" />
-                        </Button>
-                      </Link>
-                   </div>
-                </motion.div>
-             </div>
-          </div>
-          
+          <Image
+            src={imageUrl}
+            alt=""
+            fill
+            className="object-cover scale-110 blur-[80px] opacity-20 grayscale"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-[#050505]/70 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-[#050505]/40" />
         </motion.div>
       </AnimatePresence>
 
-      {/* Navigation Dots */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3 z-20 items-center">
+      {/* Content */}
+      <div className="relative h-full max-w-[1440px] mx-auto px-6 md:px-10 flex items-center">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentEvent.id}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.45, ease: 'easeOut' }}
+            className="flex items-center gap-10 md:gap-16 w-full"
+          >
+            {/* Poster */}
+            <div className="hidden md:block relative w-[200px] h-[300px] shrink-0 rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl shadow-black/60">
+              <Image
+                src={imageUrl}
+                alt={currentEvent.title || 'Event poster'}
+                fill
+                className="object-cover"
+                priority
+              />
+              {/* Subtle inner shadow */}
+              <div className="absolute inset-0 shadow-[inset_0_0_40px_rgba(0,0,0,0.4)]" />
+            </div>
+
+            {/* Text */}
+            <div className="flex-1 space-y-5 max-w-xl">
+
+              {/* Badge */}
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-1.5 text-[9px] font-semibold tracking-[0.4em] uppercase text-white/30">
+                  <span className="w-1 h-1 rounded-full bg-emerald-500 inline-block" />
+                  {currentEvent.category || 'Featured'}
+                </span>
+              </div>
+
+              {/* Title */}
+              <h1 className="text-3xl md:text-5xl font-light tracking-tight leading-[1.1] text-white">
+                {currentEvent.title}
+              </h1>
+
+              {/* Meta */}
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                {[
+                  { icon: Calendar, label: displayDate },
+                  { icon: Clock, label: displayTime },
+                  { icon: MapPin, label: displayLocation },
+                ].map(({ icon: Icon, label }) => (
+                  <span
+                    key={label}
+                    className="flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-white/30"
+                  >
+                    <Icon className="w-3 h-3 shrink-0" />
+                    <span className="truncate max-w-[180px]">{label}</span>
+                  </span>
+                ))}
+              </div>
+
+              {/* Description */}
+              <p className="text-[13px] text-white/35 leading-relaxed line-clamp-2 font-light">
+                {currentEvent.description}
+              </p>
+
+              {/* CTA */}
+              <Link href={`/events/${currentEvent.id}`} onClick={persistSelectedEvent}>
+                <Button className="mt-2 group bg-white text-black hover:bg-white/90 text-[11px] font-semibold tracking-[0.15em] uppercase h-11 px-8 rounded-xl transition-all duration-200">
+                  Get Tickets
+                  <ArrowRight className="w-3.5 h-3.5 ml-2 transition-transform duration-200 group-hover:translate-x-0.5" />
+                </Button>
+              </Link>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Dots */}
+      <div className="absolute bottom-5 right-8 flex items-center gap-2 z-20">
         {featuredEvents.map((_, idx) => (
           <button
             key={idx}
             onClick={() => setCurrentIndex(idx)}
-            className={`transition-all duration-500 rounded-sm outline-none ${
-              idx === currentIndex ? 'w-6 h-1 bg-white' : 'w-2 h-1 bg-neutral-800 hover:bg-neutral-600'
+            aria-label={`Slide ${idx + 1}`}
+            className={`rounded-full transition-all duration-400 outline-none ${
+              idx === currentIndex
+                ? 'w-5 h-[3px] bg-white rounded-sm'
+                : 'w-[3px] h-[3px] bg-white/20 hover:bg-white/40'
             }`}
-             aria-label={`Go to Registry Key ${idx + 1}`}
           />
         ))}
       </div>

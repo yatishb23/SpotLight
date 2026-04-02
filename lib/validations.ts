@@ -58,3 +58,5 @@ export const eventFilterSchema = z.object({
 export type TicketBooking = z.infer<typeof ticketBookingSchema>;
 export type EventCreation = z.infer<typeof eventCreationSchema>;
 export type EventFilter = z.infer<typeof eventFilterSchema>;
+
+

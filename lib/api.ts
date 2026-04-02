@@ -484,6 +484,10 @@ export const apiClient = {
     return deleteAdminUser(userId);
   },
 
+  async getUserBookings(userId: string) {
+    return getUserBookings(userId);
+  },
+
   async bookTicket(data: Record<string, unknown>) {
     const response = await requestApi(
       {
@@ -1101,3 +1105,69 @@ export const changeUserStatus = async (userId:string , isApproved:boolean) => {
     throw error;
   }
 };
+
+
+export const provideVerifier = async (eventId:string) => {
+  try {
+    const response = await fetch("/api/users/provide-verifier", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`
+      },
+      body: JSON.stringify({ eventId })
+    });
+    return response.json();
+  } catch (error) {
+    console.error("Error providing verifier:", error);
+    throw error;
+  }
+};
+
+export const createUser = (data:any) =>{
+   try{
+    const response = fetch("/api/admin/users/create", {
+      method: "POST",
+      headers: {  
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data)
+    });
+    return response;
+    }catch(error){
+      console.error("Error creating user:", error);
+      throw error;
+    }
+}
+
+export const getSeats = async (eventId:string) => {
+  try {
+    const response = await fetch(`/api/seats?id=${encodeURIComponent(eventId)}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`,
+      },
+    });
+    return response.json();
+  } catch (error) {
+    console.error("Error fetching seats:", error);
+    throw error;
+  }
+};
+
+export const deleteBooking = async (bookingId:string) => {
+  try {
+    const response = await fetch(`/api/bookings?id=${encodeURIComponent(bookingId)}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAccessToken()}`,
+      },
+    });
+    return response.json();
+  } catch (error) {
+    console.error("Error deleting booking:", error);
+    throw error;
+  }
+}

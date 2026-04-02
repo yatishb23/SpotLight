@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -13,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Search, RotateCcw, Loader2, Calendar, User, ShieldCheck } from "lucide-react";
+import { MoreHorizontal, Search, RotateCcw, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -26,16 +25,17 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { changeEventStatus, getAdminStats } from "@/lib/api";
+import { changeEventStatus, getAdminStats, provideVerifier } from "@/lib/api";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export default function ManageEventsPage() {
   const { data: session, status } = useSession();
+
   const [events, setEvents] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]); // 🔥 NEW
   const [isLoading, setIsLoading] = useState(true);
   const [updatingEventId, setUpdatingEventId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -55,15 +55,33 @@ export default function ManageEventsPage() {
     const fetchEvents = async () => {
       try {
         setIsLoading(true);
-        const adminData = (await getAdminStats()) as any;
-        const eventsPayload = adminData?.events;
 
-        const normalizedEvents = Array.isArray(eventsPayload)
-          ? eventsPayload
-          : eventsPayload?.events || eventsPayload?.data || [];
-        setEvents(normalizedEvents);
+        const adminData: any = await getAdminStats();
+
+        console.log("ADMIN DATA:", adminData);
+
+        let extractedEvents: any[] = [];
+        let extractedUsers: any[] = [];
+
+        // 🔥 handle all cases
+        extractedEvents =
+          adminData?.events?.events ||
+          adminData?.events?.data ||
+          adminData?.events ||
+          adminData?.data ||
+          (Array.isArray(adminData) ? adminData : []);
+
+        extractedUsers =
+          adminData?.users?.users ||
+          adminData?.users?.data ||
+          adminData?.users ||
+          [];
+
+        setEvents(extractedEvents || []);
+        setUsers(extractedUsers || []);
       } catch (error) {
-        toast.error("Security sync failed: Could not load platform events");
+        console.error(error);
+        toast.error("Security sync failed: Could not load platform data");
       } finally {
         setIsLoading(false);
       }
@@ -72,251 +90,263 @@ export default function ManageEventsPage() {
     fetchEvents();
   }, [session, status]);
 
-  const handleStatusChange = async (id: string, nextStatus: "PUBLISHED" | "CANCELLED") => {
+  // =========================
+  // 🔥 FIND ORGANIZER EMAIL
+  // =========================
+  const getOrganizerEmail = (event: any) => {
+    const organizerId = event?.organizerId || event?.userId || event?.createdBy;
+
+    const user = users.find((u) => u.id === organizerId);
+
+    return user?.email || null;
+  };
+
+  // =========================
+  // 🔥 HANDLE STATUS CHANGE
+  // =========================
+  const handleStatusChange = async (
+    id: string,
+    nextStatus: "PUBLISHED" | "CANCELLED",
+  ) => {
     try {
       setUpdatingEventId(id);
+
       await changeEventStatus(id, nextStatus);
+
+      if (nextStatus === "PUBLISHED") {
+        const event = events.find((e) => e.id === id);
+
+        const email = getOrganizerEmail(event);
+
+        if (!email) {
+          toast.error("Organizer email not found");
+          return;
+        }
+
+        // 🔥 Get verifier credentials
+        const verifierRes: any = await provideVerifier(id);
+
+        const { loginId, password } = verifierRes;
+
+        await fetch("/api/mail/send-mail", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            to: email,
+            loginId,
+            password,
+          }),
+        });
+
+        toast.success("Verifier sent to organizer email");
+      }
+
       setEvents((prev) =>
-        prev.map((event) =>
-          String(event.id) === String(id) ? { ...event, status: nextStatus } : event
-        )
+        prev.map((e) => (e.id === id ? { ...e, status: nextStatus } : e)),
       );
-      toast.success(`Protocol updated: Event marked as ${nextStatus.toLowerCase()}`);
     } catch (error) {
-      toast.error("Request failed: Unable to update event status");
+      console.error(error);
+      toast.error("Update failed");
     } finally {
       setUpdatingEventId(null);
     }
   };
 
-  const getStatusStyles = (status: string) => {
-    const s = String(status || "PUBLISHED").toUpperCase();
-    switch (s) {
-      case "DRAFT": return "text-neutral-500 border-neutral-800 bg-neutral-900/50";
-      case "PUBLISHED": return "text-emerald-400 border-emerald-900/50 bg-emerald-500/5";
-      case "ONGOING": return "text-blue-400 border-blue-900/50 bg-blue-500/5";
-      case "COMPLETED": return "text-purple-400 border-purple-900/50 bg-purple-500/5";
-      case "CANCELLED": return "text-red-400 border-red-900/50 bg-red-500/5";
-      default: return "text-neutral-400 border-neutral-800 bg-neutral-900/50";
-    }
-  };
-
-  const organizers = useMemo(() => {
-    return Array.from(
-      new Set(
-        events
-          .map((event) => String(event?.organizer || event?.organizerName || "").trim())
-          .filter(Boolean)
-      )
-    ).sort();
-  }, [events]);
-
+  // =========================
+  // FILTERS
+  // =========================
   const filteredEvents = events.filter((event) => {
     const title = String(event?.title || "").toLowerCase();
-    const organizer = String(event?.organizer || event?.organizerName || "").trim();
+    const organizer = String(event?.organizer || "").toLowerCase();
     const currentStatus = String(event?.status || "").toUpperCase();
 
-    const matchesSearch = title.includes(searchTerm.toLowerCase()) || 
-                          organizer.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = selectedStatus === "ALL" || currentStatus === selectedStatus;
-    const matchesOrganizer = selectedOrganizer === "ALL" || organizer === selectedOrganizer;
-
-    return matchesSearch && matchesStatus && matchesOrganizer;
+    return (
+      (title.includes(searchTerm.toLowerCase()) ||
+        organizer.includes(searchTerm.toLowerCase())) &&
+      (selectedStatus === "ALL" || currentStatus === selectedStatus) &&
+      (selectedOrganizer === "ALL" ||
+        organizer === selectedOrganizer.toLowerCase())
+    );
   });
 
-  if (status === "loading" || isLoading) {
+  const organizers = useMemo(() => {
+    return Array.from(new Set(events.map((e) => e.organizer).filter(Boolean)));
+  }, [events]);
+
+  if (isLoading) {
     return (
-      <div className="flex h-[60vh] flex-col items-center justify-center gap-6">
-        <div className="relative">
-          <div className="w-12 h-12 border-2 border-neutral-800 border-t-neutral-400 rounded-full animate-spin" />
-        </div>
-        <p className="text-[10px] uppercase tracking-[0.3em] text-neutral-500 font-bold">Synchronizing Records</p>
+      <div className="flex h-[60vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-white/30" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-700">
-      
-      {/* Refined Header */}
-      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 pb-10 border-b border-neutral-900">
-        <div className="space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-900 border border-neutral-800">
-            <ShieldCheck className="w-3.5 h-3.5 text-neutral-500" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">Administrative Governance</span>
-          </div>
-          <div className="space-y-1">
-            <h1 className="text-4xl font-medium tracking-tight text-neutral-50">Global Catalog</h1>
-            <p className="text-sm font-light text-neutral-500 italic">Oversight and lifecycle management for all platform activities.</p>
-          </div>
+    <div className="space-y-10">
+      {/* HEADER */}
+      <div className="flex flex-col lg:flex-row justify-between gap-6 border-b border-white/[0.04] pb-10">
+        <div>
+          <p className="text-[11px] text-white/25">Administrator</p>
+          <h1 className="text-2xl font-light text-white">Events Management</h1>
+          <p className="text-[12px] text-white/30">
+            Monitor and control all platform events.
+          </p>
         </div>
-        
+
+        {/* SEARCH + RESET */}
         <div className="flex items-center gap-3">
-          <div className="relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-600 group-focus-within:text-neutral-300 transition-colors" />
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20" />
             <Input
-              placeholder="Query events or hosts..."
-              className="w-full sm:w-[320px] pl-10 h-11 bg-neutral-950 border-neutral-900 focus:ring-1 focus:ring-neutral-700 transition-all text-sm"
+              placeholder="Search events..."
+              className="pl-10 bg-white/[0.03] border-white/[0.06] h-10"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+
           <Button
             variant="ghost"
-            size="icon"
-            className="h-11 w-11 border border-neutral-900 hover:bg-neutral-900 text-neutral-500"
+            className="h-10 w-10 text-white/30 hover:text-white hover:bg-white/[0.05]"
             onClick={() => {
+              setSearchTerm("");
               setSelectedStatus("ALL");
               setSelectedOrganizer("ALL");
-              setSearchTerm("");
             }}
           >
             <RotateCcw className="h-4 w-4" />
           </Button>
         </div>
-      </header>
+      </div>
 
-      {/* Filters & Content */}
-      <div className="space-y-6">
-        <div className="flex flex-wrap gap-4">
-          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-            <SelectTrigger className="w-full sm:w-44 h-10 bg-neutral-950 border-neutral-900 text-xs uppercase tracking-widest font-semibold">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent className="bg-neutral-950 border-neutral-900">
-              <SelectItem value="ALL">All Statuses</SelectItem>
-              <SelectItem value="DRAFT">Draft</SelectItem>
-              <SelectItem value="PUBLISHED">Published</SelectItem>
-              <SelectItem value="ONGOING">Ongoing</SelectItem>
-              <SelectItem value="COMPLETED">Completed</SelectItem>
-              <SelectItem value="CANCELLED">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* FILTERS */}
+      <div className="flex flex-wrap gap-3">
+        <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+          <SelectTrigger className="bg-white/[0.03] border-white/[0.06] h-10 text-xs">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent className="bg-[#050505] border-white/[0.08]">
+            <SelectItem value="ALL">All</SelectItem>
+            <SelectItem value="PUBLISHED">Published</SelectItem>
+            <SelectItem value="CANCELLED">Cancelled</SelectItem>
+            <SelectItem value="DRAFT">Draft</SelectItem>
+            <SelectItem value="COMPLETED">Completed</SelectItem>
+          </SelectContent>
+        </Select>
 
-          <Select value={selectedOrganizer} onValueChange={setSelectedOrganizer}>
-            <SelectTrigger className="w-full sm:w-56 h-10 bg-neutral-950 border-neutral-900 text-xs uppercase tracking-widest font-semibold">
-              <SelectValue placeholder="Organizer" />
-            </SelectTrigger>
-            <SelectContent className="bg-neutral-950 border-neutral-900">
-              <SelectItem value="ALL">All Organizers</SelectItem>
-              {organizers.map((org) => (
-                <SelectItem key={org} value={org}>{org}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <Select value={selectedOrganizer} onValueChange={setSelectedOrganizer}>
+          <SelectTrigger className="bg-white/[0.03] border-white/[0.06] h-10 text-xs">
+            <SelectValue placeholder="Organizer" />
+          </SelectTrigger>
+          <SelectContent className="bg-[#050505] border-white/[0.08]">
+            <SelectItem value="ALL">All</SelectItem>
+            {organizers.map((o) => (
+              <SelectItem key={o} value={o}>
+                {o}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-        <Card className="bg-neutral-950 border-neutral-900 overflow-hidden">
-          <Table>
-            <TableHeader className="bg-neutral-900/40">
-              <TableRow className="border-neutral-900 hover:bg-transparent">
-                <TableHead className="py-4 text-[10px] uppercase tracking-[0.2em] font-bold text-neutral-500">Identity</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.2em] font-bold text-neutral-500">Host</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.2em] font-bold text-neutral-500">Timeline</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.2em] font-bold text-neutral-500">Utilization</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.2em] font-bold text-neutral-500">Protocol</TableHead>
-                <TableHead className="text-right text-[10px] uppercase tracking-[0.2em] font-bold text-neutral-500">Command</TableHead>
+      {/* TABLE */}
+      <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-white/[0.05]">
+              <TableHead className="text-[10px] text-white/20 uppercase">
+                Event
+              </TableHead>
+              <TableHead className="text-[10px] text-white/20 uppercase">
+                Organizer
+              </TableHead>
+              <TableHead className="text-[10px] text-white/20 uppercase">
+                Date
+              </TableHead>
+              <TableHead className="text-[10px] text-white/20 uppercase">
+                Status
+              </TableHead>
+              <TableHead className="text-right text-[10px] text-white/20 uppercase">
+                Actions
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+
+          <TableBody>
+            {filteredEvents.map((event) => (
+              <TableRow
+                key={event.id}
+                className="border-white/[0.04] hover:bg-white/[0.02]"
+              >
+                <TableCell>
+                  <div>
+                    <p className="text-white">{event.title}</p>
+                    <p className="text-[11px] text-white/30">
+                      {event.category}
+                    </p>
+                  </div>
+                </TableCell>
+
+                <TableCell className="text-white/50 text-sm">
+                  {event.organizer}
+                </TableCell>
+
+                <TableCell className="text-white/40 text-sm">
+                  {event.startDatetime
+                    ? new Date(event.startDatetime).toLocaleDateString("en-IN")
+                    : "-"}
+                </TableCell>
+
+                <TableCell>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px]",
+                      event.status === "PUBLISHED"
+                        ? "text-emerald-400 border-emerald-500/20"
+                        : "text-red-400 border-red-500/20",
+                    )}
+                  >
+                    {event.status}
+                  </Badge>
+                </TableCell>
+
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-white/30 hover:text-white hover:bg-white/[0.05]"
+                      >
+                        <MoreHorizontal />
+                      </Button>
+                    </DropdownMenuTrigger>
+
+                    <DropdownMenuContent className="bg-[#050505] border-white/[0.08]">
+                      <DropdownMenuItem
+                        onClick={() =>
+                          handleStatusChange(event.id, "PUBLISHED")
+                        }
+                      >
+                        Publish
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        onClick={() =>
+                          handleStatusChange(event.id, "CANCELLED")
+                        }
+                      >
+                        Cancel
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredEvents.length === 0 ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={6} className="h-48 text-center">
-                    <p className="text-sm font-light text-neutral-600 italic">No records matching your current filter set.</p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredEvents.map((event) => {
-                  const status = String(event?.status || "DRAFT").toUpperCase();
-                  const isUpdating = updatingEventId === event.id;
-
-                  return (
-                    <TableRow key={event.id} className="border-neutral-900 hover:bg-neutral-900/30 transition-colors group">
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <span className="font-medium text-neutral-200 tracking-tight">{event.title}</span>
-                          <span className="text-[10px] uppercase tracking-wider text-neutral-600 font-bold group-hover:text-neutral-400 transition-colors">{event.category}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-xs text-neutral-400">
-                          <User className="h-3.5 w-3.5 text-neutral-600" /> {event.organizer || event.organizerName}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col text-xs text-neutral-500 gap-1.5">
-                          <span className="flex items-center gap-2 text-neutral-300 font-mono">
-                            <Calendar className="h-3.5 w-3.5 text-neutral-600" />
-                            {event.startDatetime ? new Date(event.startDatetime).toLocaleDateString('en-GB') : "TBD"}
-                          </span>
-                          <span className="text-[10px] uppercase text-neutral-600 ml-5">
-                            {event.startDatetime ? new Date(event.startDatetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "-"}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-neutral-200 font-medium">{event.ticketsSold ?? 0}</span>
-                          <span className="text-neutral-800">/</span>
-                          <span className="text-neutral-500 font-light italic">{event.capacity ?? event.totalCapacity ?? "∞"}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={`font-bold text-[9px] uppercase tracking-widest px-2.5 py-0.5 ${getStatusStyles(status)}`}>
-                          {status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-9 w-9 p-0 text-neutral-500 hover:text-white hover:bg-neutral-800">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-neutral-950 border-neutral-800 text-neutral-300 shadow-2xl">
-                            <DropdownMenuLabel className="text-[10px] uppercase tracking-tighter text-neutral-500">Command Control</DropdownMenuLabel>
-                            <DropdownMenuSeparator className="bg-neutral-800" />
-                            
-                            {status === "DRAFT" && (
-                              <DropdownMenuItem 
-                                className="text-emerald-400 focus:bg-emerald-950 focus:text-emerald-300"
-                                disabled={isUpdating}
-                                onClick={() => handleStatusChange(event.id, "PUBLISHED")}
-                              >
-                                Commit to Platform
-                              </DropdownMenuItem>
-                            )}
-
-                            {(status === "DRAFT" || status === "PUBLISHED") && (
-                              <DropdownMenuItem 
-                                className="text-red-400 focus:bg-red-950 focus:text-red-300"
-                                disabled={isUpdating}
-                                onClick={() => handleStatusChange(event.id, "CANCELLED")}
-                              >
-                                Abort Lifecycle
-                              </DropdownMenuItem>
-                            )}
-
-                            {["ONGOING", "COMPLETED", "CANCELLED"].includes(status) && (
-                              <DropdownMenuItem disabled className="text-neutral-700 italic text-xs">
-                                Read-only state
-                              </DropdownMenuItem>
-                            )}
-                            
-                            <DropdownMenuSeparator className="bg-neutral-800" />
-                            <DropdownMenuItem className="text-[10px] font-mono text-neutral-600" disabled>
-                              UID: {event.id}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </Card>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

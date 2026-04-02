@@ -4,21 +4,11 @@ import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { 
-  CheckCircle2, 
-  Download, 
-  Share2, 
-  Loader2, 
-  ArrowRight, 
-  ShieldCheck, 
-  Ticket as TicketIcon,
-  Home
+  CheckCircle2,
+  Download,
+  Loader2,
+  ShieldCheck,
+  Home,
 } from "lucide-react";
 import { updateOrderStatus } from "@/lib/api";
 import { useSession } from "next-auth/react";
@@ -29,7 +19,6 @@ export default function BookingConfirmationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
-  
   const bookingId = searchParams.get("bookingId");
   const [isLoading, setIsLoading] = useState(true);
   const [bookingData, setBookingData] = useState<any>(null);
@@ -48,9 +37,14 @@ export default function BookingConfirmationPage() {
       try {
         hasCalledUpdate.current = true;
         const response = await updateOrderStatus(bookingId);
-        setBookingData(response?.data);
-      } catch (error) {
-        console.error("Sync Error:", error);
+
+        setBookingData(response);
+      } catch (error: any) {
+        console.error("Sync error:", error);
+        // If it fails to update, redirect to login (session-expired)
+        router.push(
+          `/events/session-expired?id=${bookingId}?reason="Session Expired"`,
+        );
       } finally {
         setIsLoading(false);
       }
@@ -58,143 +52,150 @@ export default function BookingConfirmationPage() {
     syncBooking();
   }, [bookingId]);
 
-  if (isLoading) {
+  if (isLoading)
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-6">
-          <Loader2 className="h-10 w-10 text-white animate-spin opacity-20" />
-          <p className="text-[10px] uppercase tracking-[0.4em] text-neutral-500 font-bold animate-pulse">
-            Finalizing Identity Ledger
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 text-white/20 animate-spin" />
+          <p className="text-[11px] uppercase tracking-widest text-white/20 animate-pulse">
+            Confirming your booking…
           </p>
         </div>
       </div>
     );
-  }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-neutral-200 py-20 px-6 selection:bg-neutral-800">
-      <div className="max-w-2xl mx-auto space-y-12">
-        
-        {/* Success Header */}
-        <div className="flex flex-col items-center text-center space-y-4">
-          <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center mb-2">
-            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+    <div className="min-h-screen bg-[#050505] text-neutral-200 py-16 px-6">
+      <div className="max-w-lg mx-auto space-y-8">
+        {/* Success header */}
+        <div className="text-center space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-7 h-7 text-emerald-500" />
           </div>
-          <h1 className="text-4xl font-medium tracking-tighter text-white italic">Protocol Success.</h1>
-          <p className="text-[10px] uppercase tracking-[0.4em] text-neutral-500 font-bold">
-            Transaction Confirmed // Access Granted
+          <h1 className="text-xl font-medium text-white">Booking confirmed</h1>
+          <p className="text-[12px] text-white/30">
+            Your tickets are ready. Check your email for details.
           </p>
         </div>
 
-        {/* LIVE TICKET PREVIEW (Tailwind mirror of TicketPDF) */}
-        <div className="relative group">
-          <div className="absolute -inset-1 bg-gradient-to-b from-neutral-800 to-transparent rounded-[2rem] opacity-20 blur-2xl" />
-          
-          <Card className="relative bg-white text-black rounded-none border-none overflow-hidden shadow-2xl">
-            {/* Top Security Bar */}
-            <div className="h-2 bg-black w-full" />
-            
-            <div className="p-8 md:p-12 space-y-10">
-              <div className="flex justify-between items-start border-b-2 border-black pb-6">
-                <div>
-                  <h2 className="text-3xl font-black uppercase italic tracking-tighter leading-none">EventHub.</h2>
-                  <p className="text-[8px] font-bold tracking-[0.3em] text-neutral-400 mt-2 uppercase">Identity Passport</p>
-                </div>
-                <ShieldCheck className="w-8 h-8 opacity-20" />
+        {/* Ticket card */}
+        <div className="bg-white rounded-2xl overflow-hidden shadow-2xl">
+          <div className="h-1.5 bg-black w-full" />
+          <div className="p-8 text-black space-y-6">
+            {/* Brand */}
+            <div className="flex items-center justify-between border-b border-black/10 pb-5">
+              <span className="text-[16px] font-bold tracking-tight">
+                EventHub
+              </span>
+              <span className="text-[9px] font-medium text-black/30 uppercase tracking-widest">
+                Ticket
+              </span>
+            </div>
+
+            {/* Event name */}
+            <div>
+              <p className="text-[9px] font-semibold text-black/30 uppercase tracking-widest mb-1">
+                Event
+              </p>
+              <h2 className="text-lg font-semibold tracking-tight truncate">
+                {bookingData?.eventName || "Event"}
+              </h2>
+            </div>
+
+            {/* Details grid */}
+            <div className="grid grid-cols-2 gap-5 border-t border-black/[0.08] pt-5">
+              <div>
+                <p className="text-[9px] font-semibold text-black/30 uppercase tracking-widest mb-0.5">
+                  Name
+                </p>
+                <p className="text-[13px] font-medium truncate">
+                  {session?.user?.name || "Guest"}
+                </p>
               </div>
-
-              <div className="space-y-8">
-                <div>
-                  <label className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Access Designation</label>
-                  <h3 className="text-2xl font-bold uppercase tracking-tight mt-1 truncate">
-                    {bookingData?.eventName || "Neon Dreams Concert"}
-                  </h3>
-                </div>
-
-                <div className="grid grid-cols-2 gap-8 pt-6 border-t border-neutral-100">
-                  <div>
-                    <label className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Holder</label>
-                    <p className="text-sm font-bold uppercase truncate">{session?.user?.name || "Verified Guest"}</p>
-                  </div>
-                  <div>
-                    <label className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Ledger ID</label>
-                    <p className="text-[10px] font-mono font-bold uppercase truncate">{bookingId}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-8 pt-6 border-t border-neutral-100">
-                   <div>
-                      <label className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Allocation</label>
-                      <p className="text-xl font-black italic">{bookingData?.quantity || 1} Unit(s)</p>
-                   </div>
-                   <div>
-                      <label className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Valuation</label>
-                      <p className="text-xl font-black italic">{formatINR(bookingData?.totalAmount)}</p>
-                   </div>
-                </div>
+              <div>
+                <p className="text-[9px] font-semibold text-black/30 uppercase tracking-widest mb-0.5">
+                  Booking ID
+                </p>
+                <p className="text-[11px] font-mono truncate">
+                  {bookingId?.slice(0, 12)}…
+                </p>
               </div>
-
-              {/* QR and Decorative Bottom */}
-              <div className="flex justify-between items-end border-t-2 border-black pt-10 mt-10">
-                <div className="space-y-1">
-                   <p className="text-[8px] font-mono font-bold opacity-30 uppercase tracking-widest">Stamp: {new Date().getTime()}</p>
-                   <p className="text-[7px] max-w-[140px] leading-tight text-neutral-400 font-bold uppercase italic">
-                     Digital signature verified. Scan for biometric sync at entry point.
-                   </p>
-                </div>
-                <div className="bg-white p-2 border-[4px] border-black">
-                   {bookingData?.qr?.[0] ? (
-                     <img 
-                        src={`data:image/png;base64,${bookingData.qr[0]}`} 
-                        alt="Access QR" 
-                        className="w-24 h-24 image-render-pixelated"
-                     />
-                   ) : (
-                     <div className="w-24 h-24 bg-neutral-100 flex items-center justify-center">
-                        <Loader2 className="w-4 h-4 animate-spin text-neutral-300" />
-                     </div>
-                   )}
-                </div>
+              <div>
+                <p className="text-[9px] font-semibold text-black/30 uppercase tracking-widest mb-0.5">
+                  Tickets
+                </p>
+                <p className="text-[13px] font-medium">
+                  {bookingData?.quantity || 0}
+                </p>
+              </div>
+              <div>
+                <p className="text-[9px] font-semibold text-black/30 uppercase tracking-widest mb-0.5">
+                  Total paid
+                </p>
+                <p className="text-[13px] font-medium">
+                  {formatINR(bookingData?.totalAmount)}
+                </p>
               </div>
             </div>
-          </Card>
+
+            {/* QR Section - Updated to handle string directly */}
+            <div className="flex justify-between items-end border-t border-black/[0.08] pt-5">
+              <p className="text-[9px] text-black/25 max-w-[130px] leading-relaxed">
+                Present this QR at the venue entrance.
+              </p>
+              <div className="border-4 border-black p-1.5">
+                {bookingData?.qr ? (
+                  <img
+                    src={`data:image/png;base64,${bookingData.qr}`}
+                    alt="QR code"
+                    className="w-20 h-20"
+                  />
+                ) : (
+                  <div className="w-20 h-20 bg-black/5 flex items-center justify-center">
+                    <Loader2 className="w-4 h-4 animate-spin text-black/20" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex gap-3">
           {bookingData && (
             <PDFDownloadLink
-              document={<TicketPDF booking={bookingData} user={session?.user} />}
-              fileName={`Pass-${bookingId?.slice(0, 8)}.pdf`}
+              document={
+                <TicketPDF booking={bookingData} user={session?.user} />
+              }
+              fileName={`ticket-${bookingId?.slice(0, 8)}.pdf`}
               className="flex-1"
             >
               {({ loading }) => (
-                <Button className="w-full h-14 bg-white text-black hover:bg-neutral-200 rounded-2xl font-black uppercase tracking-[0.2em] text-xs transition-all flex items-center justify-center gap-3">
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                  Download Official Pass
+                <Button className="w-full h-11 bg-white text-black hover:bg-white/90 text-[12px] font-semibold rounded-xl flex items-center justify-center gap-2">
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  Download ticket
                 </Button>
               )}
             </PDFDownloadLink>
           )}
-
-          <Button 
-            variant="outline" 
-            className="flex-1 h-14 border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-900 rounded-2xl font-bold uppercase tracking-widest text-[10px]"
+          <Button
+            variant="outline"
             onClick={() => router.push("/")}
+            className="flex-1 h-11 border-white/[0.07] bg-transparent text-white/40 hover:text-white hover:bg-white/[0.05] text-[12px] rounded-xl"
           >
-            <Home className="w-3 h-3 mr-2" />
-            Back to Terminal
+            <Home className="w-3.5 h-3.5 mr-2" /> Home
           </Button>
         </div>
 
-        {/* Security Footer */}
-        <div className="flex flex-col items-center gap-4 opacity-20">
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-neutral-800">
-            <ShieldCheck className="w-3 h-3 text-emerald-500" />
-            <span className="text-[8px] font-bold uppercase tracking-[0.3em] text-neutral-500">
-              Biometric Pass Linked to Identity
-            </span>
-          </div>
+        <div className="flex items-center justify-center gap-2 opacity-25">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+          <span className="text-[10px] text-white/40 uppercase tracking-widest">
+            Verified booking
+          </span>
         </div>
       </div>
     </div>

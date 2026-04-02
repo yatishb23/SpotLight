@@ -71,3 +71,44 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const bookingId = request.nextUrl.searchParams.get("id");
+    const accessToken = request.headers
+      .get("authorization")
+      ?.replace("Bearer ", "");
+
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: "Missing access token" },
+        { status: 401 },
+      );
+    }
+    
+    const response = await fetch(`${process.env.BACKEND_URL}/api/bookings/${bookingId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      method: "DELETE",
+    });
+    const data=await response.json();
+    
+    
+    if (response.ok) {
+      return NextResponse.json({ success:true, message: "Booking deleted successfully" });
+    } else {
+      const errorData = await response.json();
+      return NextResponse.json(
+        { error: errorData?.message || "Failed to delete booking" },
+      )
+    }
+  }catch(error){
+     console.error("Error fetching bookings:", error);
+
+    return NextResponse.json(
+      { error: "Failed to fetch bookings" },
+      { status: 500 },
+    );
+  }
+}

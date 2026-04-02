@@ -2,28 +2,36 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
-import { 
-  Lock, 
-  Mail, 
-  ShieldCheck, 
-  Camera, 
-  Fingerprint, 
-  RefreshCcw, 
+import {
+  Lock,
+  Mail,
+  ShieldCheck,
+  Camera,
+  Fingerprint,
+  RefreshCcw,
   Loader2,
   Hash,
   Globe,
-  ArrowRight
+  ArrowRight,
 } from "lucide-react";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+
 import { toast } from "sonner";
 import { changePassword } from "@/lib/api";
 
 export default function ProfilePage() {
   const { data: session } = useSession();
+
   const [isUpdating, setIsUpdating] = useState(false);
 
   const [passwords, setPasswords] = useState({
@@ -34,185 +42,173 @@ export default function ProfilePage() {
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!session?.user?.id) {
+      return toast.error("Session expired. Please login again.");
+    }
+
+    if (passwords.newPassword.length < 6) {
+      return toast.error("Password must be at least 6 characters.");
+    }
+
     if (passwords.newPassword !== passwords.confirmPassword) {
-      return toast.error("Verification mismatch: New passwords do not match.");
+      return toast.error("Passwords do not match.");
     }
 
     try {
       setIsUpdating(true);
-      const response = await changePassword(localStorage.getItem("userId") || "", passwords.oldPassword, passwords.newPassword);
-      if(response.success) {
-        toast.success("Security credentials updated successfully.");
-        setPasswords({ oldPassword: "", newPassword: "", confirmPassword: "" });
+
+      const res = await changePassword(
+        session.user.id,
+        passwords.oldPassword,
+        passwords.newPassword
+      );
+
+      if (res?.success) {
+        toast.success("Password updated successfully.");
+        setPasswords({
+          oldPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        });
+      } else {
+        toast.error(res?.message || "Failed to update password.");
       }
-      else {
-        toast.error(response.message || "Failed to update credentials.");
-      }
-    } catch (error) {
-      toast.error("Authentication failure: Verify current password.");
+    } catch (err) {
+      toast.error("Invalid current password.");
     } finally {
       setIsUpdating(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-neutral-200 selection:bg-neutral-800">
-      <div className="max-w-4xl mx-auto py-16 px-6 space-y-12">
-        
-        {/* Identity Overview Section */}
-        <section className="relative flex flex-col md:flex-row items-center md:items-start gap-10 pb-12 border-b border-neutral-900">
+    <div className="min-h-screen bg-[#050505] text-neutral-200">
+      <div className="max-w-5xl mx-auto py-16 px-6 space-y-12">
+
+        {/* Header */}
+        <header className="pb-10 border-b border-neutral-900">
+          <h1 className="text-4xl font-medium text-white">Profile</h1>
+          <p className="text-sm text-neutral-500 font-light">
+            Manage identity and account security
+          </p>
+        </header>
+
+        {/* Profile Section */}
+        <section className="flex flex-col md:flex-row items-center gap-10 border-b border-neutral-900 pb-12">
           <div className="relative">
-            <div className="p-1 rounded-full border border-neutral-800 bg-neutral-900/50 backdrop-blur-sm">
-              <Avatar className="h-32 w-32 border-4 border-[#0a0a0a]">
-                <AvatarImage src={session?.user?.image || ""} className="object-cover" />
-                <AvatarFallback className="bg-neutral-900 text-neutral-500 text-2xl font-light">
-                  {session?.user?.name?.charAt(0) || "U"}
-                </AvatarFallback>
-              </Avatar>
-            </div>
-            <button className="absolute bottom-2 right-2 p-2 bg-white text-black rounded-full shadow-xl hover:scale-110 transition-transform">
+            <Avatar className="h-28 w-28 border border-neutral-800">
+              <AvatarImage src={session?.user?.image || ""} />
+              <AvatarFallback className="bg-neutral-900 text-neutral-500 text-xl">
+                {session?.user?.name?.charAt(0) || "U"}
+              </AvatarFallback>
+            </Avatar>
+
+            <button className="absolute bottom-0 right-0 p-2 bg-white text-black rounded-full hover:scale-110 transition">
               <Camera className="w-4 h-4" />
             </button>
           </div>
-          
-          <div className="flex-1 text-center md:text-left pt-4 space-y-4">
-            <div className="space-y-1">
-              <h1 className="text-5xl font-medium tracking-tighter text-white">
-                {session?.user?.name?.split(' ')[0] || "User"}
-              </h1>
-              <p className="text-neutral-500 font-mono text-sm tracking-tight italic">
-                {session?.user?.email}
-              </p>
-            </div>
-            
-            <div className="flex flex-wrap justify-center md:justify-start gap-3">
-              <span className="px-3 py-1 rounded-md bg-neutral-900 border border-neutral-800 text-[10px] font-bold uppercase tracking-widest text-neutral-400">
-                {session?.user?.role || "Member"}
+
+          <div className="space-y-3 text-center md:text-left">
+            <h2 className="text-3xl text-white">
+              {session?.user?.name || "User"}
+            </h2>
+
+            <p className="text-neutral-500 text-sm">
+              {session?.user?.email}
+            </p>
+
+            <div className="flex gap-3 justify-center md:justify-start">
+              <span className="px-3 py-1 bg-neutral-900 border border-neutral-800 text-xs uppercase text-neutral-400">
+                {session?.user?.role}
               </span>
-              <span className="px-3 py-1 rounded-md bg-emerald-500/5 border border-emerald-500/20 text-[10px] font-bold uppercase tracking-widest text-emerald-500 flex items-center gap-1.5">
-                <ShieldCheck className="w-3 h-3" /> System Verified
+
+              <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" />
+                Verified
               </span>
             </div>
           </div>
         </section>
 
-        {/* Tabbed Navigation */}
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="bg-transparent border-b border-neutral-900 w-full justify-start rounded-none h-auto p-0 gap-8 mb-10">
-            <TabsTrigger 
-              value="overview" 
-              className="bg-transparent border-b-2 border-transparent data-[state=active]:border-white data-[state=active]:bg-transparent rounded-none px-0 pb-4 text-xs uppercase tracking-widest text-neutral-500 data-[state=active]:text-white transition-all font-bold"
-            >
-              Overview
-            </TabsTrigger>
-            <TabsTrigger 
-              value="security" 
-              className="bg-transparent border-b-2 border-transparent data-[state=active]:border-white data-[state=active]:bg-transparent rounded-none px-0 pb-4 text-xs uppercase tracking-widest text-neutral-500 data-[state=active]:text-white transition-all font-bold"
-            >
-              Security
-            </TabsTrigger>
+        {/* Tabs */}
+        <Tabs defaultValue="overview">
+          <TabsList className="border-b border-neutral-900 bg-transparent gap-6">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
 
-          {/* Tab 1: Profile Overview */}
-          <TabsContent value="overview" className="animate-in fade-in duration-700">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="p-6 rounded-2xl bg-neutral-950 border border-neutral-900 space-y-4 hover:border-neutral-700 transition-colors">
-                <div className="flex items-center gap-2 text-neutral-400">
-                  <Fingerprint className="w-4 h-4" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Display Name</span>
-                </div>
-                <p className="text-xl text-neutral-200 font-medium tracking-tight">
-                  {session?.user?.name || "Unassigned"}
-                </p>
-              </div>
+          {/* Overview */}
+          <TabsContent value="overview">
+            <div className="grid md:grid-cols-2 gap-6 mt-6">
 
-              <div className="p-6 rounded-2xl bg-neutral-950 border border-neutral-900 space-y-4 hover:border-neutral-700 transition-colors">
-                <div className="flex items-center gap-2 text-neutral-400">
-                  <Mail className="w-4 h-4" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Email Identity</span>
-                </div>
-                <p className="text-xl text-neutral-200 font-medium tracking-tight">
-                  {session?.user?.email || "Locked"}
-                </p>
-              </div>
+              <InfoCard icon={<Fingerprint />} label="Name" value={session?.user?.name} />
+              <InfoCard icon={<Mail />} label="Email" value={session?.user?.email} />
+              <InfoCard icon={<Globe />} label="Access" value="Global" />
+              <InfoCard icon={<Hash />} label="User ID" value={session?.user?.id} small />
 
-              <div className="p-6 rounded-2xl bg-neutral-950 border border-neutral-900 space-y-4 hover:border-neutral-700 transition-colors">
-                <div className="flex items-center gap-2 text-neutral-400">
-                  <Globe className="w-4 h-4" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Access Zone</span>
-                </div>
-                <p className="text-xl text-neutral-200 font-medium tracking-tight">Universal</p>
-              </div>
-
-              <div className="p-6 rounded-2xl bg-neutral-950 border border-neutral-900 space-y-4 hover:border-neutral-700 transition-colors">
-                <div className="flex items-center gap-2 text-neutral-400">
-                  <Hash className="w-4 h-4" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Registry UID</span>
-                </div>
-                <p className="text-sm font-mono text-neutral-600 truncate">{session?.user?.id || "ID_PENDING"}</p>
-              </div>
             </div>
           </TabsContent>
 
-          {/* Tab 2: Security & Password */}
-          <TabsContent value="security" className="animate-in slide-in-from-right-4 duration-500">
-            <div className="max-w-xl bg-neutral-950 border border-neutral-900 rounded-3xl p-8 md:p-10 shadow-2xl">
-              <div className="mb-10 space-y-2">
-                <h3 className="text-xl font-medium text-white flex items-center gap-2">
-                  <RefreshCcw className="w-4 h-4 text-neutral-500" />
-                  Update Credentials
-                </h3>
-                <p className="text-xs text-neutral-500 leading-relaxed font-light">
-                  Rotate your account password regularly to maintain high-level protection.
-                </p>
-              </div>
+          {/* Security */}
+          <TabsContent value="security">
+            <div className="max-w-xl mt-6 p-8 bg-neutral-950 border border-neutral-900 rounded-2xl">
 
-              <form onSubmit={handlePasswordChange} className="space-y-8">
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase tracking-widest text-neutral-500 font-bold">Current Password</Label>
-                  <Input 
-                    type="password" 
-                    required 
-                    placeholder="Enter existing password"
-                    className="bg-neutral-900/50 border-neutral-800 focus:ring-neutral-700 h-12" 
+              <h3 className="text-lg text-white mb-6 flex items-center gap-2">
+                <Lock className="w-4 h-4 text-neutral-500" />
+                Change Password
+              </h3>
+
+              <form onSubmit={handlePasswordChange} className="space-y-6">
+
+                <div>
+                  <Label>Current Password</Label>
+                  <Input
+                    type="password"
+                    required
                     value={passwords.oldPassword}
-                    onChange={(e) => setPasswords({...passwords, oldPassword: e.target.value})}
+                    onChange={(e) =>
+                      setPasswords({ ...passwords, oldPassword: e.target.value })
+                    }
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase tracking-widest text-neutral-500 font-bold">New Password</Label>
-                    <Input 
-                      type="password" 
-                      required 
-                      className="bg-neutral-900 border-neutral-800 focus:ring-neutral-700 h-12" 
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>New Password</Label>
+                    <Input
+                      type="password"
+                      required
                       value={passwords.newPassword}
-                      onChange={(e) => setPasswords({...passwords, newPassword: e.target.value})}
+                      onChange={(e) =>
+                        setPasswords({ ...passwords, newPassword: e.target.value })
+                      }
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase tracking-widest text-neutral-500 font-bold">Confirm Password</Label>
-                    <Input 
-                      type="password" 
-                      required 
-                      className="bg-neutral-900 border-neutral-800 focus:ring-neutral-700 h-12" 
+
+                  <div>
+                    <Label>Confirm Password</Label>
+                    <Input
+                      type="password"
+                      required
                       value={passwords.confirmPassword}
-                      onChange={(e) => setPasswords({...passwords, confirmPassword: e.target.value})}
+                      onChange={(e) =>
+                        setPasswords({ ...passwords, confirmPassword: e.target.value })
+                      }
                     />
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-neutral-900 flex justify-end">
-                  <Button 
-                    type="submit" 
+                <div className="flex justify-end pt-4">
+                  <Button
                     disabled={isUpdating}
-                    className="bg-white text-black hover:bg-neutral-200 text-xs uppercase tracking-widest font-bold px-10 h-12 rounded-xl group"
+                    className="bg-white text-black hover:bg-neutral-200"
                   >
                     {isUpdating ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      <>Change Password <ArrowRight className="ml-2 w-3 h-3 group-hover:translate-x-1 transition-transform" /></>
+                      <>
+                        Update <ArrowRight className="ml-2 w-3 h-3" />
+                      </>
                     )}
                   </Button>
                 </div>
@@ -221,15 +217,27 @@ export default function ProfilePage() {
           </TabsContent>
         </Tabs>
 
-        {/* System Footer Info */}
-        <div className="pt-12 flex justify-between items-center border-t border-neutral-900 opacity-50">
-          <div className="flex gap-4">
-             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-             <span className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest">Active Session</span>
-          </div>
-          <p className="text-[10px] text-neutral-800 font-mono">PROTOCOL: AUTH_V2</p>
-        </div>
+        {/* Footer */}
+        <footer className="pt-10 border-t border-neutral-900 text-xs text-neutral-600 flex justify-between">
+          <span>SESSION ACTIVE</span>
+          <span>AUTH_SECURE_V2</span>
+        </footer>
+
       </div>
+    </div>
+  );
+}
+
+function InfoCard({ icon, label, value, small }: any) {
+  return (
+    <div className="p-6 bg-neutral-950 border border-neutral-900 rounded-xl">
+      <div className="flex items-center gap-2 text-neutral-500 text-xs uppercase mb-2">
+        {icon}
+        {label}
+      </div>
+      <p className={`${small ? "text-xs" : "text-lg"} text-white break-all`}>
+        {value || "N/A"}
+      </p>
     </div>
   );
 }
